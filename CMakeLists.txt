@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(hratc2017_entry_template)
+project(hratc2017_entry_rcmakers)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -18,6 +18,8 @@ find_package(catkin REQUIRED COMPONENTS
   angles
   laser_assembler
   control_msgs
+#  hratc2017_framework
+#  hratc2017_robot
 )
 
 ## System dependencies are found with CMake's conventions
@@ -136,6 +138,11 @@ target_link_libraries(get_data_node ${catkin_LIBRARIES})
 
 # all install targets should use catkin DESTINATION variables
 # See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
+
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+  PATTERN ".svn" EXCLUDE
+)
 
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination

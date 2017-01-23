@@ -1,19 +1,17 @@
 <?xml version="1.0"?>
 <package>
-  <name>hratc2017_entry_template</name>
-  <version>0.0.0</version>
-  <description>The hratc2017_entry_template package.</description>
+  <name>hratc2017_entry_rcmakers</name>
+  <version>0.0.1</version>
+  <description>The HRATC 2017 entry by team RCMakers.</description>
 
-  <maintainer email="rqmaffei@gmail.com">Renan Maffei</maintainer>
-  <maintainer email="mathiasfassini@gmail.com">Mathias Mantelli</maintainer>
-  <maintainer email="reneuland@gmail.com">Renata Neuland</maintainer>
-  <maintainer email="diegokindin@gmail.com">Diego Pittol</maintainer>
-  <maintainer email="goncabrita@gmail.com">Gonçalo Cabrita</maintainer>
+  <maintainer email="ali@cataltepe.com">Ali Cataltepe</maintainer>
+  <maintainer email="ege1358@gmail.com">Ege Caglar</maintainer>
+  <maintainer email="tan@gemdata.com.tr">Tan Gemicioglu</maintainer>
 
   <license>BSD</license>
-  <url type="website">http://www.inf.ufrgs.br/hratc2017/HRATC2017/Welcome.html</url>
+<!--  <url type="website">http://www.inf.ufrgs.br/hratc2017/HRATC2017/Welcome.html</url>
   <author email="goncabrita@gmail.com">Gonçalo Cabrita</author>
-  <author email="rqmaffei@gmail.com">Renan Maffei</author>
+  <author email="rqmaffei@gmail.com">Renan Maffei</author> -->
 
 
   <buildtool_depend>catkin</buildtool_depend>
@@ -41,5 +39,7 @@
   <run_depend>husky_navigation</run_depend>
   <run_depend>laser_assembler</run_depend>
   <run_depend>control_msgs</run_depend>
+<!--  <run_depend>hratc2017_framework</run_depend>
+  <run_depend>hratc2017_robot</run_depend> -->
   
 </package>
