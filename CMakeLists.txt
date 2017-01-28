@@ -151,8 +151,12 @@ install(DIRECTORY scripts/
    PATTERN ".svn" EXCLUDE
  )
 
+catkin_install_python(PROGRAMS scripts/navigator.py scripts/detector.py
+   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 ## Mark executables and/or libraries for installation
-install(TARGETS hratc2017_entry_rcmakers detector navigator
+install(TARGETS detector.py navigator.py
    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
