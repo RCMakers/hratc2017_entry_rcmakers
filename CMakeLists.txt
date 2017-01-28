@@ -152,7 +152,7 @@ install(DIRECTORY scripts/
  )
 
 ## Mark executables and/or libraries for installation
-install(TARGETS hratc2016_entry_rcmakers detector navigator
+install(TARGETS hratc2017_entry_rcmakers detector navigator
    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
