@@ -24,6 +24,21 @@ minePose = PoseStamped()
 
 minePositions = []
 
+SIGNAL_BUFFER_LENGTH = 10
+DERIVATIVE_WINDOW_LENGTH = 3 
+
+coilLeftSignalBuffer = []
+coilRightSignalBuffer = []
+
+leftCoilMeans = []
+rightCoilMeans = []
+
+leftCoilMedians = []
+rightCoilMedians = []
+
+bufferFull = False
+
+
 ######################### AUXILIARY FUNCTIONS ############################
 
 # Get a transformation matrix from a geometry_msgs/Pose
@@ -108,15 +123,30 @@ def updateCoilPoseManually(referencePose):
 
 # Wrapper function
 def detectorWrapper():
-    if isMine():
-        if isUniqueMine(minePose):
-            pubMine = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped)
-            pubMine.publish(minePose)
+    if bufferFull and len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
+        if isMine():
+            if isUniqueMine(minePose):
+                pubMine = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped)
+                pubMine.publish(minePose)
             
-            minePositions.append(minePose)
+                minePositions.append(minePose)
             
-# Detect based on simple heuristic
+# Detect based on simple heuristic #EXTRACT FEATURES AND USE DECISION TREE TO DETECT
 def isMine():
+    #FEATURES
+    leftCoil = coils.left_coil
+    rightCoil = coils.right_coil
+    leftCoilMean = leftCoilMeans[-1]
+    leftCoilMedian = leftCoilMedians[-1]
+    rightCoilMean = rightCoilMeans[-1]
+    rightCoilMedian = rightCoilMedians[-1]
+    leftCoilStdDev = np.std(coilLeftSignalBuffer)
+    rightCoilStdDev = np.std(coilRightSignalBuffer)
+    leftMeanRateOfChange = leftCoilMeans[-1] - leftCoilMeans[0]
+    rightMeanRateOfChange = rightCoilMeans[-1] - rightCoilMeans[0]
+    meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
+    mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
+
     if coils.left_coil>=35:
         minePose=leftCoilPose
         return True
@@ -138,7 +168,24 @@ def isUniqueMine(newMine):
 def receiveCoilSignal(actualCoil):
     global coils
     coils = actualCoil
-
+    if len(coilLeftSignalBuffer) <> SIGNAL_BUFFER_LENGTH and len(coilRightSignalBuffer) <> SIGNAL_BUFFER_LENGTH:
+        coilLeftSignalBuffer.append(coils.left_coil)
+        coilRightSignalBuffer.append(coils.right_coil)
+    else:
+        bufferFull = True
+        coilLeftSignalBuffer.pop(0)
+        coilLeftSignalBuffer.append(coils.left_coil)
+        coilRightSignalBuffer.pop(0)
+        coilRightSignalBuffer.append(coils.right_coil)
+        leftCoilMeans.append(np.mean(leftCoilSignalBuffer))
+        leftCoilMedians.append(np.median(leftCoilSignalBuffer))
+        rightCoilMeans.append(np.mean(rightCoilSignalBuffer))
+        rightCoilMedians.append(np.median(rightCoilSignalBuffer))
+        if len(leftCoilMeans) > DERIVATIVE_WINDOW_LENGTH:
+            leftCoilMeans.pop(0)
+            leftCoilMedians.pop(0)
+            rightCoilMeans.pop(0)
+            rightCoilMedians.pop(0)
     updateRobotPose() 
     updateCoilPoseManually(robotPose.pose)
     detectorWrapper()  
@@ -148,7 +195,7 @@ def spin():
 
 if __name__ == '__main__':
     # Initialize client node
-    rospy.init_node('client')
+    rospy.init_node('detector')
 
     transListener = tf.TransformListener()
 

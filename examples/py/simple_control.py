@@ -13,6 +13,8 @@ from tf import transformations
 # read/write stuff on screen
 std = None
 
+logfile = open("/home/rcmakers/hratc2017_workspace/coildata.txt", 'w')
+
 radStep = deg2rad(15)
 linStep = 0.1
 transformer = None
@@ -184,16 +186,17 @@ def showStats():
 def KeyCheck(stdscr):
     stdscr.keypad(True)
     stdscr.nodelay(True)
-
+    logstr = "" 
     k = None
     global std
     std = stdscr
-
+    mine_detected = False
     #publishing topics
     pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist)
 
     # While 'Esc' is not pressed
     while k != chr(27):
+        logstr = "o 1:"+str(time.time())+" 2:"+str(coils.left_coil)+" 3:"+str(coils.right_coil)+"\n"
         # Check no key
         try:
             k = stdscr.getkey()
@@ -202,6 +205,7 @@ def KeyCheck(stdscr):
 
         # Set mine position: IRREVERSIBLE ONCE SET
         if k == "x":
+            mine_detected = not mine_detected
             sendMine()
 
         # Robot movement
@@ -222,9 +226,15 @@ def KeyCheck(stdscr):
         robotTwist.linear.x = min(robotTwist.linear.x,1.0)
         robotTwist.linear.x = max(robotTwist.linear.x,-1.0)
         pubVel.publish(robotTwist)
+        
+        if(mine_detected):
+            logstr = logstr.replace("o", "x")
+        logfile.write(logstr)
 
         showStats()
         time.sleep(0.1)
+    
+    logfile.close()
 
     stdscr.keypad(False)
     rospy.signal_shutdown("Shutdown Competitor")
@@ -240,7 +250,7 @@ def StartControl():
 if __name__ == '__main__':
     # Initialize client node
     rospy.init_node('client')
-
+    
     transListener = tf.TransformListener()
 
     # Subscribing to all these topics to bring the robot or simulation to live data

@@ -1,0 +1,5 @@
+<launch>
+   <include file="$(find hratc2017_framework)/launch/run_simulation.launch"></include>
+   <node name="navigator" pkg="hratc2017_entry_rcmakers" type="navigator.py" respawn="true"/>
+   <node name="detector" pkg="hratc2017_entry_rcmakers" type="detector.py" respawn="true"/>
+</launch>
