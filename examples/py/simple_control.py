@@ -35,6 +35,18 @@ imuInfo = Imu()
 #Metal detector data
 coils = Coil()
 
+
+SIGNAL_BUFFER_LENGTH = 10
+DERIVATIVE_WINDOW_LENGTH = 3 
+coilLeftSignalBuffer = []
+coilRightSignalBuffer = []
+leftCoilMeans = []
+rightCoilMeans = []
+leftCoilMedians = []
+rightCoilMedians = []
+bufferFull = False
+
+
 ######################### AUXILIARY FUNCTIONS ############################
 
 # Get a transformation matrix from a geometry_msgs/Pose
@@ -146,11 +158,17 @@ def receiveImu(ImuNow):
     global imuInfo 
     imuInfo = ImuNow
 
-# Mine Detection Callback
+# Mine Detection Callback, append to signal buffer, get means
 def receiveCoilSignal(actualCoil):
     global coils
     coils = actualCoil
-
+    coilLeftSignalBuffer.append(coils.left_coil)
+    coilRightSignalBuffer.append(coils.right_coil)
+    if len(coilLeftSignalBuffer > SIGNAL_BUFFER_LENGTH):
+        coilLeftSignalBuffer.pop(0)
+        coilRightSignalBuffer.pop(0)
+        leftCoilMeans.append(np.mean(coilLeftSignalBuffer))
+        rightCoilMeans.append(np.mean(coilRightSignalBuffer))
     updateRobotPose() 
     updateCoilPoseManually(robotPose.pose)  
 
