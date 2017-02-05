@@ -46,7 +46,6 @@ leftCoilMedians = []
 rightCoilMedians = []
 bufferFull = False
 
-
 ######################### AUXILIARY FUNCTIONS ############################
 
 # Get a transformation matrix from a geometry_msgs/Pose
@@ -164,12 +163,12 @@ def receiveCoilSignal(actualCoil):
     coils = actualCoil
     coilLeftSignalBuffer.append(coils.left_coil)
     coilRightSignalBuffer.append(coils.right_coil)
-    if len(coilLeftSignalBuffer > SIGNAL_BUFFER_LENGTH):
+    if len(coilLeftSignalBuffer) > SIGNAL_BUFFER_LENGTH:
         coilLeftSignalBuffer.pop(0)
         coilRightSignalBuffer.pop(0)
         leftCoilMeans.append(np.mean(coilLeftSignalBuffer))
         rightCoilMeans.append(np.mean(coilRightSignalBuffer))
-        if(len(leftCoilMeans > DERIVATIVE_WINDOW_LENGTH)):
+        if len(leftCoilMeans) > DERIVATIVE_WINDOW_LENGTH:
             leftCoilMeans.pop(0)
             rightCoilMeans.pop(0)
     updateRobotPose() 
@@ -200,7 +199,7 @@ def showStats():
         std.addstr(20, 0 , "Laser Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfo.ranges), min(laserInfo.ranges), max(laserInfo.ranges)))
     if laserInfoHokuyo.ranges != []:
         std.addstr(21, 0 , "Laser Hokuyo Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfoHokuyo.ranges), min(laserInfoHokuyo.ranges), max(laserInfoHokuyo.ranges)))
-
+    std.addstr(22,0, "Mine Detect Label: {}".format(mine_detected))
     std.refresh()
 
 # Basic control
@@ -211,10 +210,10 @@ def KeyCheck(stdscr):
     k = None
     global std
     std = stdscr
-    mine_detected = False
     #publishing topics
-    pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist)
-
+    pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
+    global mine_detected
+    mine_detected = False
     # While 'Esc' is not pressed
     while k != chr(27):
         if len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
@@ -231,7 +230,7 @@ def KeyCheck(stdscr):
             meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
             mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
         
-            logstr = "0 1:"+str(leftCoil)+" 2:"+str(rightCoil)+" 3:"+str(leftCoilMean)+" 4:"+str(leftCoilMedian)+" 5:"+str(rightCoilMean)+" 6:"+str(rightCoilMedian)+" 7:"+str(leftCoilStdDev)+" 8:"+str(rightCoilStdDev)+" 9:"+str(leftMeanRateOfChange)+" 10:"+str(rightMeanRateOfChange)+" 11:"+str(meansDiffOverSum)+" 12:"+str(mediansDiffOverSum)+"\n
+            logstr = "0 1:"+str(leftCoil)+" 2:"+str(rightCoil)+" 3:"+str(leftCoilMean)+" 4:"+str(leftCoilMedian)+" 5:"+str(rightCoilMean)+" 6:"+str(rightCoilMedian)+" 7:"+str(leftCoilStdDev)+" 8:"+str(rightCoilStdDev)+" 9:"+str(leftMeanRateOfChange)+" 10:"+str(rightMeanRateOfChange)+" 11:"+str(meansDiffOverSum)+" 12:"+str(mediansDiffOverSum)+"\n"
         
             # Check no key
             try:
