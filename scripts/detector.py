@@ -131,7 +131,8 @@ def detectorWrapper():
             
                 minePositions.append(minePose)
             
-# Detect based on simple heuristic #EXTRACT FEATURES AND USE DECISION TREE TO DETECT
+# Detect based on simple heuristic 
+#TODO: EXTRACT FEATURES AND USE DECISION TREE TO DETECT
 def isMine():
     #FEATURES
     leftCoil = coils.left_coil
@@ -147,10 +148,10 @@ def isMine():
     meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
     mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
 
-    if coils.left_coil>=35:
+    if coils.left_coil>=0.35:
         minePose=leftCoilPose
         return True
-    elif coils.right_coil>=35:
+    elif coils.right_coil>=0.35:
         minePose=rightCoilPose
         return True
     else:
@@ -186,7 +187,7 @@ def receiveCoilSignal(actualCoil):
             leftCoilMedians.pop(0)
             rightCoilMeans.pop(0)
             rightCoilMedians.pop(0)
-    updateRobotPose() 
+    updateRobotPose()
     updateCoilPoseManually(robotPose.pose)
     detectorWrapper()  
 
