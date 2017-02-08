@@ -202,4 +202,4 @@ if __name__ == '__main__':
 
     # Subscribing to relevant topics to bring the robot or simulation to live data
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)
-    Thread(target = spin).start()
+    rospy.spin()
