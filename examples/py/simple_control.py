@@ -13,6 +13,8 @@ from tf import transformations
 # read/write stuff on screen
 std = None
 
+logfile = open("/home/rcmakers/hratc2017_workspace/coildata.txt", 'w')
+
 radStep = deg2rad(15)
 linStep = 0.1
 transformer = None
@@ -32,6 +34,17 @@ imuInfo = Imu()
 
 #Metal detector data
 coils = Coil()
+
+
+SIGNAL_BUFFER_LENGTH = 10
+DERIVATIVE_WINDOW_LENGTH = 3 
+coilLeftSignalBuffer = []
+coilRightSignalBuffer = []
+leftCoilMeans = []
+rightCoilMeans = []
+leftCoilMedians = []
+rightCoilMedians = []
+bufferFull = False
 
 ######################### AUXILIARY FUNCTIONS ############################
 
@@ -144,11 +157,20 @@ def receiveImu(ImuNow):
     global imuInfo 
     imuInfo = ImuNow
 
-# Mine Detection Callback
+# Mine Detection Callback, append to signal buffer, get means
 def receiveCoilSignal(actualCoil):
     global coils
     coils = actualCoil
-
+    coilLeftSignalBuffer.append(coils.left_coil)
+    coilRightSignalBuffer.append(coils.right_coil)
+    if len(coilLeftSignalBuffer) > SIGNAL_BUFFER_LENGTH:
+        coilLeftSignalBuffer.pop(0)
+        coilRightSignalBuffer.pop(0)
+        leftCoilMeans.append(np.mean(coilLeftSignalBuffer))
+        rightCoilMeans.append(np.mean(coilRightSignalBuffer))
+        if len(leftCoilMeans) > DERIVATIVE_WINDOW_LENGTH:
+            leftCoilMeans.pop(0)
+            rightCoilMeans.pop(0)
     updateRobotPose() 
     updateCoilPoseManually(robotPose.pose)  
 
@@ -177,54 +199,77 @@ def showStats():
         std.addstr(20, 0 , "Laser Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfo.ranges), min(laserInfo.ranges), max(laserInfo.ranges)))
     if laserInfoHokuyo.ranges != []:
         std.addstr(21, 0 , "Laser Hokuyo Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfoHokuyo.ranges), min(laserInfoHokuyo.ranges), max(laserInfoHokuyo.ranges)))
-
+    std.addstr(22,0, "Mine Detect Label: {}".format(mine_detected))
     std.refresh()
 
 # Basic control
 def KeyCheck(stdscr):
     stdscr.keypad(True)
     stdscr.nodelay(True)
-
+    logstr = "" 
     k = None
     global std
     std = stdscr
-
     #publishing topics
-    pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist)
-
+    pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
+    global mine_detected
+    mine_detected = False
     # While 'Esc' is not pressed
     while k != chr(27):
-        # Check no key
-        try:
-            k = stdscr.getkey()
-        except:
-            k = None
+        if len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
+            leftCoil = coils.left_coil
+            rightCoil = coils.right_coil
+            leftCoilMean = leftCoilMeans[-1]
+            leftCoilMedian = np.median(coilLeftSignalBuffer)
+            rightCoilMean = rightCoilMeans[-1]
+            rightCoilMedian = np.median(coilRightSignalBuffer)
+            leftCoilStdDev = np.std(coilLeftSignalBuffer)
+            rightCoilStdDev = np.std(coilRightSignalBuffer)
+            leftMeanRateOfChange = leftCoilMeans[-1] - leftCoilMeans[0]
+            rightMeanRateOfChange = rightCoilMeans[-1] - rightCoilMeans[0]
+            meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
+            mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
+        
+            logstr = "0 1:"+str(leftCoil)+" 2:"+str(rightCoil)+" 3:"+str(leftCoilMean)+" 4:"+str(leftCoilMedian)+" 5:"+str(rightCoilMean)+" 6:"+str(rightCoilMedian)+" 7:"+str(leftCoilStdDev)+" 8:"+str(rightCoilStdDev)+" 9:"+str(leftMeanRateOfChange)+" 10:"+str(rightMeanRateOfChange)+" 11:"+str(meansDiffOverSum)+" 12:"+str(mediansDiffOverSum)+"\n"
+        
+            # Check no key
+            try:
+                k = stdscr.getkey()
+            except:
+                k = None
 
-        # Set mine position: IRREVERSIBLE ONCE SET
-        if k == "x":
-            sendMine()
+            # Set mine position: IRREVERSIBLE ONCE SET
+            if k == "x":
+                mine_detected = not mine_detected
+                sendMine()
 
-        # Robot movement
-        if k == " ":
-            robotTwist.linear.x  = 0.0           
-            robotTwist.angular.z = 0.0
-        if k == "KEY_LEFT":
-            robotTwist.angular.z += radStep
-        if k == "KEY_RIGHT":
-            robotTwist.angular.z -= radStep
-        if k == "KEY_UP":
-            robotTwist.linear.x +=  linStep
-        if k == "KEY_DOWN":
-            robotTwist.linear.x -= linStep
+            # Robot movement
+            if k == " ":
+                robotTwist.linear.x  = 0.0           
+                robotTwist.angular.z = 0.0
+            if k == "KEY_LEFT":
+                robotTwist.angular.z += radStep
+            if k == "KEY_RIGHT":
+                robotTwist.angular.z -= radStep
+            if k == "KEY_UP":
+                robotTwist.linear.x +=  linStep
+            if k == "KEY_DOWN":
+                robotTwist.linear.x -= linStep
 
-        robotTwist.angular.z = min(robotTwist.angular.z,deg2rad(90))
-        robotTwist.angular.z = max(robotTwist.angular.z,deg2rad(-90))
-        robotTwist.linear.x = min(robotTwist.linear.x,1.0)
-        robotTwist.linear.x = max(robotTwist.linear.x,-1.0)
-        pubVel.publish(robotTwist)
+            robotTwist.angular.z = min(robotTwist.angular.z,deg2rad(90))
+            robotTwist.angular.z = max(robotTwist.angular.z,deg2rad(-90))
+            robotTwist.linear.x = min(robotTwist.linear.x,1.0)
+            robotTwist.linear.x = max(robotTwist.linear.x,-1.0)
+            pubVel.publish(robotTwist)
+            
+            if(mine_detected):
+                logstr = logstr.replace("0", "1", 1)
+            logfile.write(logstr)
 
-        showStats()
-        time.sleep(0.1)
+            showStats()
+            time.sleep(0.1)
+    
+    logfile.close()
 
     stdscr.keypad(False)
     rospy.signal_shutdown("Shutdown Competitor")
@@ -240,7 +285,7 @@ def StartControl():
 if __name__ == '__main__':
     # Initialize client node
     rospy.init_node('client')
-
+    
     transListener = tf.TransformListener()
 
     # Subscribing to all these topics to bring the robot or simulation to live data
