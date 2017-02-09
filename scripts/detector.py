@@ -123,17 +123,17 @@ def updateCoilPoseManually(referencePose):
 
 # Wrapper function
 def detectorWrapper():
-    rospy.logdebug("Wrapper C1")
+    rospy.loginfo("Wrapper C1")
     if bufferFull and len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
-        rospy.logdebug("Wrapper C2")
+        rospy.loginfo("Wrapper C2")
         if isMine():
-            rospy.logdebug("Wrapper C3")
+            rospy.loginfo("Wrapper C3")
             if isUniqueMine(minePose):
                 pubMine = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped)
                 pubMine.publish(minePose)
             
                 minePositions.append(minePose)
-                rospy.logdebug("Wrapper C4")
+                rospy.loginfo("Wrapper C4")
             
 # Detect based on simple heuristic 
 #TODO: EXTRACT FEATURES AND USE DECISION TREE TO DETECT
@@ -152,33 +152,33 @@ def isMine():
     meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
     mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
     
-    rospy.logdebug("isMineData: "+str(leftCoil)+" "+str(rightCoil))
+    rospy.loginfo("isMineData: "+str(leftCoil)+" "+str(rightCoil))
     
     if coils.left_coil>=0.35:
         minePose=leftCoilPose
-        rospy.logdebug("isMine Left True")
+        rospy.loginfo("isMine Left True")
         return True
     elif coils.right_coil>=0.35:
         minePose=rightCoilPose
-        rospy.logdebug("isMine Right True")
+        rospy.loginfo("isMine Right True")
         return True
     else:
-        rospy.logdebug("isMine False")
+        rospy.loginfo("isMine False")
         return False
     
 # Check if mine is within range of current known mines
 def isUniqueMine(newMine):
-    rospy.logdebug("isUniqueMine started")
+    rospy.loginfo("isUniqueMine started")
     for mine in minePositions:
         dist = get_pose_distance(newMine, mine)
-        rospy.logdebug("isUniqueMine distance: "+dist)
+        rospy.loginfo("isUniqueMine distance: "+dist)
         if dist<=1:
             return False
     return True
 
 # Mine Detection Callback
 def receiveCoilSignal(actualCoil):
-    rospy.logdebug("Signal received")
+    rospy.loginfo("Signal received")
     global coils
     coils = actualCoil
     if len(coilLeftSignalBuffer) <> SIGNAL_BUFFER_LENGTH and len(coilRightSignalBuffer) <> SIGNAL_BUFFER_LENGTH:
@@ -209,7 +209,7 @@ def spin():
 if __name__ == '__main__':
     # Initialize client node
     rospy.init_node('detector')
-
+    rospy.loginfo("Node initialized")
     transListener = tf.TransformListener()
 
     # Subscribing to relevant topics to bring the robot or simulation to live data
