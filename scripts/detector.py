@@ -123,7 +123,7 @@ def updateCoilPoseManually(referencePose):
 
 # Wrapper function
 def detectorWrapper():
-    rospy.loginfo("Wrapper C1")
+    rospy.loginfo("Wrapper C1 "+bufferFull+" leftCoilMeans length "+len(leftCoilMeans))
     if bufferFull and len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
         rospy.loginfo("Wrapper C2")
         if isMine():
