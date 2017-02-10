@@ -22,7 +22,7 @@ transListener = None
 
 # Robot data
 robotTwist = Twist()
-robotPose = PoseStamped()
+robotPose = PoseWithCovarianceStamped()
 leftCoilPose = PoseStamped()
 
 #laser information
@@ -70,23 +70,14 @@ def pose_msg_from_matrix(transformation):
 
 ######################### GETTING POSES FROM TF ############################
 
-def updateRobotPose():
+def updateRobotPose(robotPoseEKF):
     global robotPose
 
     # This function does not get the true robot pose, but only the pose of 'base_link' in the TF
     # you should replace it by the robot pose resulting from a good localization process 
 
-    robotPose = PoseStamped()
-    now = rospy.Time.now()
-    # Get left coil position in relation to robot
-    try:
-        transListener.waitForTransform('minefield', 'base_link', now, rospy.Duration(2.0))    
-        (trans,rot) = transListener.lookupTransform('minefield', 'base_link', now)
-    except:
-        return
+    robotPose = robotPoseEKF 
 
-    tr2 = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
-    robotPose.pose = pose_msg_from_matrix(tr2)
 
 def updateCoilPoseFromTF():
     global transListener, leftCoilPose
@@ -135,8 +126,7 @@ def sendMine():
 #    updateCoilPoseFromTF()
 
     ## It is better to compute the coil pose in relation to a corrected robot pose
-    updateRobotPose()
-    updateCoilPoseManually(robotPose.pose)
+    updateCoilPoseManually(robotPose.pose.pose)
 
     pubMine  = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped)
     pubMine.publish(leftCoilPose)
@@ -171,8 +161,7 @@ def receiveCoilSignal(actualCoil):
         if len(leftCoilMeans) > DERIVATIVE_WINDOW_LENGTH:
             leftCoilMeans.pop(0)
             rightCoilMeans.pop(0)
-    updateRobotPose() 
-    updateCoilPoseManually(robotPose.pose)  
+    updateCoilPoseManually(robotPose.pose.pose)  
 
 ######################### CURSES STUFF ############################
 
@@ -189,7 +178,7 @@ def showStats():
     std.addstr(4,0,"Angular:")
     std.addstr(5, 0, "{} \t {} \t {}".format(robotTwist.angular.x,robotTwist.angular.y,robotTwist.angular.z))
     std.addstr(7,0,"Robot Position:")
-    std.addstr(8, 0, "{} \t {} \t {}".format(robotPose.pose.position.x, robotPose.pose.position.y, robotPose.pose.position.z))
+    std.addstr(8, 0, "{} \t {} \t {}".format(robotPose.pose.pose.position.x, robotPose.pose.pose.position.y, robotPose.pose.pose.position.z))
     std.addstr(9,0,"Coil Position:")
     std.addstr(10, 0, "left: {} \t {} \t {}".format(leftCoilPose.pose.position.x, leftCoilPose.pose.position.y, leftCoilPose.pose.position.z))
 
@@ -275,9 +264,6 @@ def KeyCheck(stdscr):
     rospy.signal_shutdown("Shutdown Competitor")
 
 ######################### MAIN ############################
-
-def spin():
-    rospy.spin()
     
 def StartControl():
     wrapper(KeyCheck)
@@ -292,9 +278,9 @@ if __name__ == '__main__':
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)
     rospy.Subscriber("/imu/data", Imu, receiveImu)
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
+    rospy.Subscriber("/robot_pose_ekf/odom", PoseWithCovarianceStamped, updateRobotPose) 
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
 
     #Starting curses and ROS
     Thread(target = StartControl).start()
-    Thread(target = spin).start()
-
+    rospy.spin()
