@@ -25,7 +25,8 @@ minePose = PoseStamped()
 minePositions = []
 
 SIGNAL_BUFFER_LENGTH = 10
-DERIVATIVE_WINDOW_LENGTH = 3 
+DERIVATIVE_WINDOW_LENGTH = 3
+QUEUE_SIZE = 10
 
 coilLeftSignalBuffer = []
 coilRightSignalBuffer = []
@@ -65,7 +66,8 @@ def pose_msg_from_matrix(transformation):
 def get_pose_distance(pose1, pose2):
     matrix1 = matrix_from_pose_msg(pose1)
     matrix2 = matrix_from_pose_msg(pose2)
-    
+    rospy.loginfo("matrix1: "+str(matrix1))
+    rospy.loginfo("matrix2: "+str(matrix2))
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
 
 ########################## TEMPORARY POSE FUNCTIONS ######################
@@ -123,16 +125,16 @@ def updateCoilPoseManually(referencePose):
 
 # Wrapper function
 def detectorWrapper():
-    rospy.loginfo("Wrapper C1 "+bufferFull+" leftCoilMeans length "+len(leftCoilMeans))
+    rospy.loginfo("Wrapper C1 "+str(bufferFull)+" leftCoilMeans length "+str(len(leftCoilMeans)))
     if bufferFull and len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
         rospy.loginfo("Wrapper C2")
         if isMine():
             rospy.loginfo("Wrapper C3")
-            if isUniqueMine(minePose):
-                pubMine = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped)
+            if isUniqueMine(minePose.pose):
+                pubMine = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped, queue_size=QUEUE_SIZE)
                 pubMine.publish(minePose)
             
-                minePositions.append(minePose)
+                minePositions.append(minePose.pose)
                 rospy.loginfo("Wrapper C4")
             
 # Detect based on simple heuristic 
@@ -153,12 +155,14 @@ def isMine():
     mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
     
     rospy.loginfo("isMineData: "+str(leftCoil)+" "+str(rightCoil))
-    
-    if coils.left_coil>=0.35:
+
+    global minePose
+
+    if coils.left_coil>=0.70:
         minePose=leftCoilPose
         rospy.loginfo("isMine Left True")
         return True
-    elif coils.right_coil>=0.35:
+    elif coils.right_coil>=0.70:
         minePose=rightCoilPose
         rospy.loginfo("isMine Right True")
         return True
@@ -168,18 +172,18 @@ def isMine():
     
 # Check if mine is within range of current known mines
 def isUniqueMine(newMine):
-    rospy.loginfo("isUniqueMine started")
+    rospy.loginfo("isUniqueMine started "+str(minePositions))
     for mine in minePositions:
         dist = get_pose_distance(newMine, mine)
-        rospy.loginfo("isUniqueMine distance: "+dist)
+        rospy.loginfo("isUniqueMine distance: "+str(dist))
         if dist<=1:
             return False
     return True
 
 # Mine Detection Callback
 def receiveCoilSignal(actualCoil):
-    rospy.loginfo("Signal received")
     global coils
+    global bufferFull
     coils = actualCoil
     if len(coilLeftSignalBuffer) <> SIGNAL_BUFFER_LENGTH and len(coilRightSignalBuffer) <> SIGNAL_BUFFER_LENGTH:
         coilLeftSignalBuffer.append(coils.left_coil)

@@ -8,4 +8,3 @@ from threading import Thread
 from geometry_msgs.msg import Twist, Pose, PoseStamped, PoseWithCovariance, PoseWithCovarianceStamped, Transform
 from sensor_msgs.msg import LaserScan, Imu
 from tf import transformations
-
