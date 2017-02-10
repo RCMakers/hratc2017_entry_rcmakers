@@ -20,8 +20,6 @@ find_package(catkin REQUIRED COMPONENTS
   control_msgs
   openslam_gmapping
   map_server
-  robot_pose_ekf
-  gps_common
 #  hratc2017_framework
 #  hratc2017_robot
 )
@@ -155,7 +153,7 @@ install(DIRECTORY scripts/
    PATTERN ".svn" EXCLUDE
  )
 
-catkin_install_python(PROGRAMS scripts/navigator.py scripts/detector.py scripts/locator.py
+catkin_install_python(PROGRAMS scripts/navigator.py scripts/detector.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 
