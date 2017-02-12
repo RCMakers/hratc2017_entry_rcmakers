@@ -9,6 +9,8 @@ from geometry_msgs.msg import Twist, Pose, PoseStamped, PoseWithCovariance, Pose
 from sensor_msgs.msg import LaserScan, Imu
 from metal_detector_msgs.msg._Coil import Coil
 from tf import transformations
+from sklearn.datasets import load_svmlight_file
+from sklearn import tree
 
 std = None
 
@@ -39,6 +41,7 @@ rightCoilMedians = []
 
 bufferFull = False
 
+decTree = tree.DecisionTreeClassifier()
 
 ######################### AUXILIARY FUNCTIONS ############################
 
@@ -69,6 +72,14 @@ def get_pose_distance(pose1, pose2):
     rospy.loginfo("matrix1: "+str(matrix1))
     rospy.loginfo("matrix2: "+str(matrix2))
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
+
+########################## DECISION TREE #################################
+
+def trainDecTree():
+    global decTree
+
+    X_train, y_train = load_svmlight_file("/data/training.txt")
+    decTree = decTree.fit(X_train, y_train)
 
 ########################## TEMPORARY POSE FUNCTIONS ######################
 
@@ -156,19 +167,15 @@ def isMine():
     
     rospy.loginfo("isMineData: "+str(leftCoil)+" "+str(rightCoil))
 
-    global minePose
-
-    if coils.left_coil>=0.70:
-        minePose=leftCoilPose
-        rospy.loginfo("isMine Left True")
-        return True
-    elif coils.right_coil>=0.70:
-        minePose=rightCoilPose
-        rospy.loginfo("isMine Right True")
-        return True
-    else:
-        rospy.loginfo("isMine False")
-        return False
+    global minePose, decTree
+    
+    coilData = [leftCoil,rightCoil,leftCoilMean,leftCoilMedian,rightCoilMean,rightCoilMedian,leftCoilStdDev,RightCoilStdDev,leftMeanRateOfChange,rightMeanRateOfChange,meansDiffOverSum,mediansDiffOverSum]
+    
+    prediction = decTree.predict(coilData)
+    
+    if prediction:
+        minePose = leftCoilPose
+        return false
     
 # Check if mine is within range of current known mines
 def isUniqueMine(newMine):
@@ -182,8 +189,8 @@ def isUniqueMine(newMine):
 
 # Mine Detection Callback
 def receiveCoilSignal(actualCoil):
-    global coils
-    global bufferFull
+    global coils, bufferFull
+    
     coils = actualCoil
     if len(coilLeftSignalBuffer) <> SIGNAL_BUFFER_LENGTH and len(coilRightSignalBuffer) <> SIGNAL_BUFFER_LENGTH:
         coilLeftSignalBuffer.append(coils.left_coil)
@@ -215,6 +222,8 @@ if __name__ == '__main__':
     rospy.init_node('detector')
     rospy.loginfo("Node initialized")
     transListener = tf.TransformListener()
+
+    trainDecTree()
 
     # Subscribing to relevant topics to bring the robot or simulation to live data
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)
