@@ -78,8 +78,8 @@ def get_pose_distance(pose1, pose2):
 def trainDecTree():
     global decTree
 
-    X_train, y_train = load_svmlight_file("/data/training.txt")
-    decTree = decTree.fit(X_train, y_train)
+    X_train, y_train = load_svmlight_file("/home/rcmakers/hratc2017_workspace/src/hratc2017_entry_rcmakers/data/training.txt")
+    decTree = decTree.fit(X_train.todense(), y_train)
 
 ########################## TEMPORARY POSE FUNCTIONS ######################
 
@@ -169,13 +169,15 @@ def isMine():
 
     global minePose, decTree
     
-    coilData = [leftCoil,rightCoil,leftCoilMean,leftCoilMedian,rightCoilMean,rightCoilMedian,leftCoilStdDev,RightCoilStdDev,leftMeanRateOfChange,rightMeanRateOfChange,meansDiffOverSum,mediansDiffOverSum]
+    coilData = [leftCoil,rightCoil,leftCoilMean,leftCoilMedian,rightCoilMean,rightCoilMedian,leftCoilStdDev,rightCoilStdDev,leftMeanRateOfChange,rightMeanRateOfChange,meansDiffOverSum,mediansDiffOverSum]
     
     prediction = decTree.predict(coilData)
     
     if prediction:
         minePose = leftCoilPose
-        return false
+        return True
+    else:
+        return False
     
 # Check if mine is within range of current known mines
 def isUniqueMine(newMine):
