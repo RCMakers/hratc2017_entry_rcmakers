@@ -8,6 +8,7 @@ from threading import Thread
 from geometry_msgs.msg import Twist, Pose, PoseStamped, PoseWithCovariance, PoseWithCovarianceStamped, Transform
 from sensor_msgs.msg import LaserScan, Imu
 from metal_detector_msgs.msg._Coil import Coil
+from std_msgs.msg import Bool
 from tf import transformations
 from sklearn.datasets import load_svmlight_file
 from sklearn import tree
@@ -16,11 +17,6 @@ std = None
 
 transformer = None
 transListener = None
-
-distanceFromCenterX = 4.5
-distanceFromCenterY = 4.5
-initialPose = PoseWithCovarianceStamped()
-initialPoseGet = False
 
 coils = Coil()
 robotTwist = Twist()
@@ -81,22 +77,14 @@ def get_pose_distance(pose1, pose2):
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
 
 
-########################## TEMPORARY POSE FUNCTIONS ######################
+########################## POSE FUNCTIONS ######################
 
 #REMOVE THESE AFTER NAVIGATOR STARTS PUBLISHING POSE DATA
 
 def updateRobotPose(ekfPose):
-    global robotPose, initialPoseGet, initialPose
+    global robotPose
     robotPose = ekfPose
-    if initialPoseGet:
-        offsetPose = robotPose
-        offsetPose.pose.pose.position.x = offsetPose.pose.pose.position.x - initialPose.pose.pose.position.x + distanceFromCenterX
-        offsetPose.pose.pose.position.y = offsetPose.pose.pose.position.y - initialPose.pose.pose.position.y + distanceFromCenterY
-        robotPose = offsetPose
     updateCoilPoseManually(robotPose.pose.pose)
-    if not initialPoseGet:
-        initialPoseGet = True
-        initialPose = ekfPose
 
 def updateCoilPoseManually(referencePose):
     global transListener, leftCoilPose, rightCoilPose
@@ -134,7 +122,9 @@ def detectorWrapper():
     rospy.loginfo("Wrapper C1 "+str(bufferFull)+" leftCoilMeans length "+str(len(leftCoilMeans)))
     if bufferFull and len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
         rospy.loginfo("Wrapper C2")
+        #isMineNear()
         if isMine():
+            rospy.loginfo("LEFTCOIL"+str(leftCoilPose.pose.position))
             global minePose
             if coils.left_coil > coils.right_coil:
                 minePose = leftCoilPose
@@ -163,7 +153,6 @@ def isMine():
     rightMeanRateOfChange = rightCoilMeans[-1] - rightCoilMeans[0]
     meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
     mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
-    global minePose
     
     coilData = [[leftCoil, rightCoil, leftCoilMean, leftCoilMedian, rightCoilMean, rightCoilMedian, leftCoilStdDev, rightCoilStdDev, leftMeanRateOfChange, rightMeanRateOfChange, meansDiffOverSum, mediansDiffOverSum]]
 
@@ -173,7 +162,34 @@ def isMine():
         return True
     else:
         return False
+
+def isMineNear():
+    #FEATURES
+    leftCoil = coils.left_coil
+    rightCoil = coils.right_coil
+    leftCoilMean = leftCoilMeans[-1]
+    leftCoilMedian = leftCoilMedians[-1]
+    rightCoilMean = rightCoilMeans[-1]
+    rightCoilMedian = rightCoilMedians[-1]
+    leftCoilStdDev = np.std(coilLeftSignalBuffer)
+    rightCoilStdDev = np.std(coilRightSignalBuffer)
+    leftMeanRateOfChange = leftCoilMeans[-1] - leftCoilMeans[0]
+    rightMeanRateOfChange = rightCoilMeans[-1] - rightCoilMeans[0]
+    meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
+    mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
     
+    coilData = [[leftCoil, rightCoil, leftCoilMean, leftCoilMedian, rightCoilMean, rightCoilMedian, leftCoilStdDev, rightCoilStdDev, leftMeanRateOfChange, rightMeanRateOfChange, meansDiffOverSum, mediansDiffOverSum]]
+    
+    prediction = decTreeNearing.predict(coilData)
+    
+    if prediction:
+        rospy.loginfo("MINE NEAR"+str(coilData))
+        rospy.sleep(5)
+        mineNear = Bool()
+        mineNear.data = True
+        nearPub = rospy.Publisher('/detector/mine_near', Bool, queue_size = 1, latch = True)
+        nearPub.publish(mineNear)   
+
 # Check if mine is within range of current known mines
 def isUniqueMine(newMine):
     rospy.loginfo("isUniqueMine started "+str(minePositions))
