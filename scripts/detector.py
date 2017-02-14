@@ -135,11 +135,16 @@ def detectorWrapper():
     if bufferFull and len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
         rospy.loginfo("Wrapper C2")
         if isMine():
+            global minePose
+            if coils.left_coil > coils.right_coil:
+                minePose = leftCoilPose
+            else:
+                minePose = rightCoilPose
             rospy.loginfo("Wrapper C3")
             if isUniqueMine(minePose.pose):
-                pubMine = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped, queue_size=QUEUE_SIZE)
+                pubMine = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped, queue_size = 1, latch = True)
                 pubMine.publish(minePose)
-            
+                rospy.loginfo("minePose:"+str(minePose.pose))
                 minePositions.append(minePose.pose)
                 rospy.loginfo("Wrapper C4")
             
@@ -160,12 +165,11 @@ def isMine():
     mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
     global minePose
     
-    coilData = [leftCoil, rightCoil, leftCoilMean, leftCoilMedian, rightCoilMean, rightCoilMedian, leftCoilStdDev, rightCoilStdDev, leftMeanRateOfChange, rightMeanRateOfChange, meansDiffOverSum, mediansDiffOverSum]
+    coilData = [[leftCoil, rightCoil, leftCoilMean, leftCoilMedian, rightCoilMean, rightCoilMedian, leftCoilStdDev, rightCoilStdDev, leftMeanRateOfChange, rightMeanRateOfChange, meansDiffOverSum, mediansDiffOverSum]]
 
     prediction = decTree.predict(coilData)
     
     if prediction:
-        minePose = leftCoilPose
         return True
     else:
         return False
@@ -173,6 +177,8 @@ def isMine():
 # Check if mine is within range of current known mines
 def isUniqueMine(newMine):
     rospy.loginfo("isUniqueMine started "+str(minePositions))
+    if len(minePositions) == 0:
+        return True
     for mine in minePositions:
         dist = get_pose_distance(newMine, mine)
         rospy.loginfo("isUniqueMine distance: "+str(dist))
