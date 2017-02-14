@@ -48,7 +48,6 @@
   <run_depend>map_server</run_depend>
   <run_depend>robot_localization</run_depend>
   <run_depend>python-numpy</run_depend>
-  <run_depend>python-sklearn</run_depend>
 
 <!--  <run_depend>hratc2017_framework</run_depend>
   <run_depend>hratc2017_robot</run_depend> -->
