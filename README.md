@@ -44,3 +44,8 @@ In the root directory of your workspace, run the following:
 ## Usage
 With the navigation stack, sensors, and simulation (if applicable) running, run the following command:  
 `$ roslaunch hratc2017_entry_rcmakers hratc2017_rcmakers.launch`
+
+## Contributions
+* Ege Çağlar: Navigation and localization
+* Tan Gemicioğlu: Mine detection, methods research
+* Ali Çataltepe: System design and debugging
