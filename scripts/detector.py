@@ -17,12 +17,19 @@ std = None
 transformer = None
 transListener = None
 
+distanceFromCenterX = 4.5
+distanceFromCenterY = 4.5
+initialPose = PoseWithCovarianceStamped()
+initialPoseGet = False
+
 coils = Coil()
 robotTwist = Twist()
-robotPose = PoseStamped()
 leftCoilPose = PoseStamped()
 rightCoilPose = PoseStamped()
 minePose = PoseStamped()
+
+robotPose = PoseWithCovarianceStamped()
+
 
 minePositions = []
 
@@ -41,7 +48,7 @@ rightCoilMedians = []
 
 bufferFull = False
 
-decTree = tree.DecisionTreeClassifier()
+
 
 ######################### AUXILIARY FUNCTIONS ############################
 
@@ -73,41 +80,29 @@ def get_pose_distance(pose1, pose2):
     rospy.loginfo("matrix2: "+str(matrix2))
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
 
-########################## DECISION TREE #################################
-
-def trainDecTree():
-    global decTree
-
-    X_train, y_train = load_svmlight_file("/home/rcmakers/hratc2017_workspace/src/hratc2017_entry_rcmakers/data/training.txt")
-    decTree = decTree.fit(X_train.todense(), y_train)
 
 ########################## TEMPORARY POSE FUNCTIONS ######################
 
 #REMOVE THESE AFTER NAVIGATOR STARTS PUBLISHING POSE DATA
 
-def updateRobotPose():
-    global robotPose
-
-    # This function does not get the true robot pose, but only the pose of 'base_link' in the TF
-    # you should replace it by the robot pose resulting from a good localization process 
-
-    robotPose = PoseStamped()
-    now = rospy.Time.now()
-    # Get left coil position in relation to robot
-    try:
-        transListener.waitForTransform('minefield', 'base_link', now, rospy.Duration(2.0))    
-        (trans,rot) = transListener.lookupTransform('minefield', 'base_link', now)
-    except:
-        return
-
-    tr2 = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
-    robotPose.pose = pose_msg_from_matrix(tr2)
+def updateRobotPose(ekfPose):
+    global robotPose, initialPoseGet, initialPose
+    robotPose = ekfPose
+    if initialPoseGet:
+        offsetPose = robotPose
+        offsetPose.pose.pose.position.x = offsetPose.pose.pose.position.x - initialPose.pose.pose.position.x + distanceFromCenterX
+        offsetPose.pose.pose.position.y = offsetPose.pose.pose.position.y - initialPose.pose.pose.position.y + distanceFromCenterY
+        robotPose = offsetPose
+    updateCoilPoseManually(robotPose.pose.pose)
+    if not initialPoseGet:
+        initialPoseGet = True
+        initialPose = ekfPose
 
 def updateCoilPoseManually(referencePose):
     global transListener, leftCoilPose, rightCoilPose
 
     now = rospy.Time.now()
-    # Get left coil pose in relation to robot
+    # Get left and right coil pose in relation to robot
     try:
         transListener.waitForTransform('base_link', 'left_coil', now, rospy.Duration(2.0))    
         (transL,rotL) = transListener.lookupTransform('base_link', 'left_coil', now)
@@ -148,8 +143,7 @@ def detectorWrapper():
                 minePositions.append(minePose.pose)
                 rospy.loginfo("Wrapper C4")
             
-# Detect based on simple heuristic 
-#TODO: EXTRACT FEATURES AND USE DECISION TREE TO DETECT
+# Detect based on decision tree
 def isMine():
     #FEATURES
     leftCoil = coils.left_coil
@@ -164,13 +158,10 @@ def isMine():
     rightMeanRateOfChange = rightCoilMeans[-1] - rightCoilMeans[0]
     meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
     mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
+    global minePose
     
-    rospy.loginfo("isMineData: "+str(leftCoil)+" "+str(rightCoil))
+    coilData = [leftCoil, rightCoil, leftCoilMean, leftCoilMedian, rightCoilMean, rightCoilMedian, leftCoilStdDev, rightCoilStdDev, leftMeanRateOfChange, rightMeanRateOfChange, meansDiffOverSum, mediansDiffOverSum]
 
-    global minePose, decTree
-    
-    coilData = [leftCoil,rightCoil,leftCoilMean,leftCoilMedian,rightCoilMean,rightCoilMedian,leftCoilStdDev,rightCoilStdDev,leftMeanRateOfChange,rightMeanRateOfChange,meansDiffOverSum,mediansDiffOverSum]
-    
     prediction = decTree.predict(coilData)
     
     if prediction:
@@ -212,21 +203,37 @@ def receiveCoilSignal(actualCoil):
             leftCoilMedians.pop(0)
             rightCoilMeans.pop(0)
             rightCoilMedians.pop(0)
-    updateRobotPose()
-    updateCoilPoseManually(robotPose.pose)
+    rospy.loginfo("coilSignalBuffer"+str(coilLeftSignalBuffer))
+    rospy.loginfo("derivativeWindow"+str(leftCoilMeans))
     detectorWrapper()  
 
-def spin():
-    rospy.spin()
-
-if __name__ == '__main__':
-    # Initialize client node
+if __name__ == '__main__':    
+     
+    # Initialize detector node
     rospy.init_node('detector')
     rospy.loginfo("Node initialized")
     transListener = tf.TransformListener()
 
-    trainDecTree()
+    decTree = tree.DecisionTreeClassifier()
+    decTreeNearing = tree.DecisionTreeClassifier()
+
+    directory = os.path.dirname(os.path.abspath(__file__))
+    
+    # Train decision trees
+    detectionTrainPath = os.path.join(directory, '..', 'data', 'training.txt')
+    nearingTrainPath = os.path.join(directory, '..', 'data', 'nearingtraining.txt')
+
+    rospy.loginfo("start training trees")
+    X_train, y_train = load_svmlight_file(detectionTrainPath)
+    decTree = decTree.fit(X_train.toarray(), y_train)
+
+    X_train_nearing, y_train_nearing = load_svmlight_file(nearingTrainPath)
+    decTreeNearing = decTreeNearing.fit(X_train_nearing.toarray(), y_train_nearing)
+    rospy.loginfo("trained trees")
+    
+    rospy.wait_for_message("/robot_pose_ekf/odom", PoseWithCovarianceStamped, timeout=None)
 
     # Subscribing to relevant topics to bring the robot or simulation to live data
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)
+    rospy.Subscriber("/robot_pose_ekf/odom", PoseWithCovarianceStamped, updateRobotPose, queue_size = 1)
     rospy.spin()

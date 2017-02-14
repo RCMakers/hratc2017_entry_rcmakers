@@ -29,6 +29,7 @@
   <build_depend>gmapping</build_depend>
   <build_depend>openslam_gmapping</build_depend>
   <build_depend>map_server</build_depend>
+  <build_depend>robot_localization</build_depend>
 
   <run_depend>metal_detector_msgs</run_depend>
   <run_depend>roscpp</run_depend>
@@ -42,8 +43,10 @@
   <run_depend>husky_navigation</run_depend>
   <run_depend>laser_assembler</run_depend>
   <run_depend>control_msgs</run_depend>
-  <run_depend>slam_gmapping</run_depend>
+  <run_depend>gmapping</run_depend>
+  <run_depend>openslam_gmapping</run_depend>
   <run_depend>map_server</run_depend>
+  <run_depend>robot_localization</run_depend>
   <run_depend>python-numpy</run_depend>
   <run_depend>python-sklearn</run_depend>
 

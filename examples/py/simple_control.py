@@ -35,6 +35,11 @@ imuInfo = Imu()
 #Metal detector data
 coils = Coil()
 
+distanceFromCenterX = 5.0
+distanceFromCenterY = 5.0
+
+initialPose = PoseWithCovarianceStamped()
+initialPoseGet = False
 
 SIGNAL_BUFFER_LENGTH = 10
 DERIVATIVE_WINDOW_LENGTH = 3 
@@ -70,14 +75,31 @@ def pose_msg_from_matrix(transformation):
 
 ######################### GETTING POSES FROM TF ############################
 
-def updateRobotPose(robotPoseEKF):
+def updateRobotPose(ekfPose):
     global robotPose
-
-    # This function does not get the true robot pose, but only the pose of 'base_link' in the TF
-    # you should replace it by the robot pose resulting from a good localization process 
-
-    robotPose = robotPoseEKF 
-
+    poseCache = ekfPose
+   # tmp = -poseCache.pose.pose.position.x
+   # poseCache.pose.pose.position.x = poseCache.pose.pose.position.y
+   # poseCache.pose.pose.position.y = tmp
+   # poseCache.pose.pose.position.x = poseCache.pose.pose.position.x+distanceFromCenterX
+   # poseCache.pose.pose.position.y = poseCache.pose.pose.position.y+distanceFromCenterY
+   # robotPose = poseCache 
+    if initialPoseGet:
+        offsetPose = poseCache
+        offsetPose.pose.pose.position.x = initialPose.pose.pose.position.x - poseCache.pose.pose.position.x + distanceFromCenterX
+        offsetPose.pose.pose.position.y = poseCache.pose.pose.position.y - initialPose.pose.pose.position.y + distanceFromCenterY
+        tmp = offsetPose.pose.pose.position.y
+        offsetPose.pose.pose.position.y = offsetPose.pose.pose.position.x
+        offsetPose.pose.pose.position.x = tmp
+        offsetPose.pose.pose.position.z = 0.5
+        robotPose = offsetPose
+    else:
+        global initialPoseGet, initialPose
+        initialPoseGet = True
+        initialPose = ekfPose
+        rospy.loginfo(str(initialPose))
+        robotPose = ekfPose
+    updateCoilPoseManually(robotPose.pose.pose)
 
 def updateCoilPoseFromTF():
     global transListener, leftCoilPose
@@ -188,7 +210,7 @@ def showStats():
         std.addstr(20, 0 , "Laser Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfo.ranges), min(laserInfo.ranges), max(laserInfo.ranges)))
     if laserInfoHokuyo.ranges != []:
         std.addstr(21, 0 , "Laser Hokuyo Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfoHokuyo.ranges), min(laserInfoHokuyo.ranges), max(laserInfoHokuyo.ranges)))
-    std.addstr(22,0, "Mine Detect Label: {}".format(mine_detected))
+    #std.addstr(22,0, "Mine Detect Label: {}".format(str(mine_detected)))
     std.refresh()
 
 # Basic control
