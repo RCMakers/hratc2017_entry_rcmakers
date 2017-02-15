@@ -97,8 +97,11 @@ def updateRobotPose(ekfPose):
     except:
         return
     
-    poseMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
-    poseCache.pose.pose=pose_msg_from_matrix(poseMat)
+    poseErrorMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
+    poseMat = matrix_from_pose_msg(poseCache.pose.pose)
+    correctedMat = np.dot(poseMat,poseErrorMat)
+    
+    poseCache.pose.pose=pose_msg_from_matrix(correctedMat)
     
     tmp = poseCache.pose.pose.position.x
     poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
