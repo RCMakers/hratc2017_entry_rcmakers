@@ -10,10 +10,11 @@ from sensor_msgs.msg import LaserScan, Imu
 from metal_detector_msgs.msg._Coil import Coil
 from tf import transformations
 
+
 # read/write stuff on screen
 std = None
 
-logfile = open("/home/rcmakers/hratc2017_workspace/coildata.txt", 'w')
+offsetWritten = False
 
 radStep = deg2rad(15)
 linStep = 0.1
@@ -22,7 +23,7 @@ transListener = None
 
 # Robot data
 robotTwist = Twist()
-robotPose = PoseWithCovarianceStamped()
+robotPose = PoseStamped()
 leftCoilPose = PoseStamped()
 
 #laser information
@@ -34,22 +35,6 @@ imuInfo = Imu()
 
 #Metal detector data
 coils = Coil()
-
-distanceFromCenterX = 5.0
-distanceFromCenterY = 5.0
-
-initialPose = PoseWithCovarianceStamped()
-initialPoseGet = False
-
-SIGNAL_BUFFER_LENGTH = 10
-DERIVATIVE_WINDOW_LENGTH = 3 
-coilLeftSignalBuffer = []
-coilRightSignalBuffer = []
-leftCoilMeans = []
-rightCoilMeans = []
-leftCoilMedians = []
-rightCoilMedians = []
-bufferFull = False
 
 ######################### AUXILIARY FUNCTIONS ############################
 
@@ -77,29 +62,18 @@ def pose_msg_from_matrix(transformation):
 
 def updateRobotPose(ekfPose):
     global robotPose
-    poseCache = ekfPose
-   # tmp = -poseCache.pose.pose.position.x
-   # poseCache.pose.pose.position.x = poseCache.pose.pose.position.y
-   # poseCache.pose.pose.position.y = tmp
-   # poseCache.pose.pose.position.x = poseCache.pose.pose.position.x+distanceFromCenterX
-   # poseCache.pose.pose.position.y = poseCache.pose.pose.position.y+distanceFromCenterY
-   # robotPose = poseCache 
-    if initialPoseGet:
-        offsetPose = poseCache
-        offsetPose.pose.pose.position.x = initialPose.pose.pose.position.x - poseCache.pose.pose.position.x + distanceFromCenterX
-        offsetPose.pose.pose.position.y = poseCache.pose.pose.position.y - initialPose.pose.pose.position.y + distanceFromCenterY
-        tmp = offsetPose.pose.pose.position.y
-        offsetPose.pose.pose.position.y = offsetPose.pose.pose.position.x
-        offsetPose.pose.pose.position.x = tmp
-        offsetPose.pose.pose.position.z = 0.5
-        robotPose = offsetPose
-    else:
-        global initialPoseGet, initialPose
-        initialPoseGet = True
-        initialPose = ekfPose
-        rospy.loginfo(str(initialPose))
-        robotPose = ekfPose
-    updateCoilPoseManually(robotPose.pose.pose)
+    # you should replace it by the robot pose resulting from a good localization proc
+    robotPose = PoseStamped()
+    now = rospy.Time.now()
+    # Get left coil position in relation to robot
+    try:
+        transListener.waitForTransform('minefield', 'base_link', now, rospy.Duration(2.0))    
+        (trans,rot) = transListener.lookupTransform('minefield', 'base_link', now)
+    except:
+        return
+    tr2 = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
+    robotPose.pose = pose_msg_from_matrix(tr2)
+    navfile.write(str(robotPose.pose.position.x)+","+str(robotPose.pose.position.y)+","+str(ekfPose.pose.pose.position.x)+","+str(ekfPose.pose.pose.position.y)+"\n")
 
 def updateCoilPoseFromTF():
     global transListener, leftCoilPose
@@ -148,7 +122,7 @@ def sendMine():
 #    updateCoilPoseFromTF()
 
     ## It is better to compute the coil pose in relation to a corrected robot pose
-    updateCoilPoseManually(robotPose.pose.pose)
+    updateCoilPoseManually(robotPose.pose)
 
     pubMine  = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped)
     pubMine.publish(leftCoilPose)
@@ -169,21 +143,12 @@ def receiveImu(ImuNow):
     global imuInfo 
     imuInfo = ImuNow
 
-# Mine Detection Callback, append to signal buffer, get means
+# Mine Detection Callback
 def receiveCoilSignal(actualCoil):
     global coils
     coils = actualCoil
-    coilLeftSignalBuffer.append(coils.left_coil)
-    coilRightSignalBuffer.append(coils.right_coil)
-    if len(coilLeftSignalBuffer) > SIGNAL_BUFFER_LENGTH:
-        coilLeftSignalBuffer.pop(0)
-        coilRightSignalBuffer.pop(0)
-        leftCoilMeans.append(np.mean(coilLeftSignalBuffer))
-        rightCoilMeans.append(np.mean(coilRightSignalBuffer))
-        if len(leftCoilMeans) > DERIVATIVE_WINDOW_LENGTH:
-            leftCoilMeans.pop(0)
-            rightCoilMeans.pop(0)
-    updateCoilPoseManually(robotPose.pose.pose)  
+
+    updateCoilPoseManually(robotPose.pose)  
 
 ######################### CURSES STUFF ############################
 
@@ -200,7 +165,7 @@ def showStats():
     std.addstr(4,0,"Angular:")
     std.addstr(5, 0, "{} \t {} \t {}".format(robotTwist.angular.x,robotTwist.angular.y,robotTwist.angular.z))
     std.addstr(7,0,"Robot Position:")
-    std.addstr(8, 0, "{} \t {} \t {}".format(robotPose.pose.pose.position.x, robotPose.pose.pose.position.y, robotPose.pose.pose.position.z))
+    std.addstr(8, 0, "{} \t {} \t {}".format(robotPose.pose.position.x, robotPose.pose.position.y, robotPose.pose.position.z))
     std.addstr(9,0,"Coil Position:")
     std.addstr(10, 0, "left: {} \t {} \t {}".format(leftCoilPose.pose.position.x, leftCoilPose.pose.position.y, leftCoilPose.pose.position.z))
 
@@ -210,82 +175,62 @@ def showStats():
         std.addstr(20, 0 , "Laser Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfo.ranges), min(laserInfo.ranges), max(laserInfo.ranges)))
     if laserInfoHokuyo.ranges != []:
         std.addstr(21, 0 , "Laser Hokuyo Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfoHokuyo.ranges), min(laserInfoHokuyo.ranges), max(laserInfoHokuyo.ranges)))
-    #std.addstr(22,0, "Mine Detect Label: {}".format(str(mine_detected)))
+
     std.refresh()
 
 # Basic control
 def KeyCheck(stdscr):
     stdscr.keypad(True)
     stdscr.nodelay(True)
-    logstr = "" 
+
     k = None
     global std
     std = stdscr
+
     #publishing topics
-    pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
-    global mine_detected
-    mine_detected = False
+    pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist)
+
     # While 'Esc' is not pressed
     while k != chr(27):
-        if len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
-            leftCoil = coils.left_coil
-            rightCoil = coils.right_coil
-            leftCoilMean = leftCoilMeans[-1]
-            leftCoilMedian = np.median(coilLeftSignalBuffer)
-            rightCoilMean = rightCoilMeans[-1]
-            rightCoilMedian = np.median(coilRightSignalBuffer)
-            leftCoilStdDev = np.std(coilLeftSignalBuffer)
-            rightCoilStdDev = np.std(coilRightSignalBuffer)
-            leftMeanRateOfChange = leftCoilMeans[-1] - leftCoilMeans[0]
-            rightMeanRateOfChange = rightCoilMeans[-1] - rightCoilMeans[0]
-            meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
-            mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
-        
-            logstr = "0 1:"+str(leftCoil)+" 2:"+str(rightCoil)+" 3:"+str(leftCoilMean)+" 4:"+str(leftCoilMedian)+" 5:"+str(rightCoilMean)+" 6:"+str(rightCoilMedian)+" 7:"+str(leftCoilStdDev)+" 8:"+str(rightCoilStdDev)+" 9:"+str(leftMeanRateOfChange)+" 10:"+str(rightMeanRateOfChange)+" 11:"+str(meansDiffOverSum)+" 12:"+str(mediansDiffOverSum)+"\n"
-        
-            # Check no key
-            try:
-                k = stdscr.getkey()
-            except:
-                k = None
+        # Check no key
+        try:
+            k = stdscr.getkey()
+        except:
+            k = None
 
-            # Set mine position: IRREVERSIBLE ONCE SET
-            if k == "x":
-                mine_detected = not mine_detected
-                sendMine()
+        # Set mine position: IRREVERSIBLE ONCE SET
+        if k == "x":
+            sendMine()
 
-            # Robot movement
-            if k == " ":
-                robotTwist.linear.x  = 0.0           
-                robotTwist.angular.z = 0.0
-            if k == "KEY_LEFT":
-                robotTwist.angular.z += radStep
-            if k == "KEY_RIGHT":
-                robotTwist.angular.z -= radStep
-            if k == "KEY_UP":
-                robotTwist.linear.x +=  linStep
-            if k == "KEY_DOWN":
-                robotTwist.linear.x -= linStep
+        # Robot movement
+        if k == " ":
+            robotTwist.linear.x  = 0.0           
+            robotTwist.angular.z = 0.0
+        if k == "KEY_LEFT":
+            robotTwist.angular.z += radStep
+        if k == "KEY_RIGHT":
+            robotTwist.angular.z -= radStep
+        if k == "KEY_UP":
+            robotTwist.linear.x +=  linStep
+        if k == "KEY_DOWN":
+            robotTwist.linear.x -= linStep
 
-            robotTwist.angular.z = min(robotTwist.angular.z,deg2rad(90))
-            robotTwist.angular.z = max(robotTwist.angular.z,deg2rad(-90))
-            robotTwist.linear.x = min(robotTwist.linear.x,1.0)
-            robotTwist.linear.x = max(robotTwist.linear.x,-1.0)
-            pubVel.publish(robotTwist)
-            
-            if(mine_detected):
-                logstr = logstr.replace("0", "1", 1)
-            logfile.write(logstr)
+        robotTwist.angular.z = min(robotTwist.angular.z,deg2rad(90))
+        robotTwist.angular.z = max(robotTwist.angular.z,deg2rad(-90))
+        robotTwist.linear.x = min(robotTwist.linear.x,1.0)
+        robotTwist.linear.x = max(robotTwist.linear.x,-1.0)
+        pubVel.publish(robotTwist)
 
-            showStats()
-            time.sleep(0.1)
-    
-    logfile.close()
-
+        showStats()
+        time.sleep(0.1)
+    navfile.close()
     stdscr.keypad(False)
     rospy.signal_shutdown("Shutdown Competitor")
 
 ######################### MAIN ############################
+
+def spin():
+    rospy.spin()
     
 def StartControl():
     wrapper(KeyCheck)
@@ -293,18 +238,16 @@ def StartControl():
 if __name__ == '__main__':
     # Initialize client node
     rospy.init_node('client')
-    
-    navfile = open("/home/Users/rcmakers/hratc2017_workspace/navfile.csv", "w")
-    navfile.write("x,y,xekf,yekf\n") 
-    transListener = tf.TransformListener()
 
+    transListener = tf.TransformListener()
+    navfile = open("/home/rcmakers/hratc2017_workspace/navfile.csv", "w")
+    navfile.write("x,y,xekf,yekf\n")
     # Subscribing to all these topics to bring the robot or simulation to live data
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)
     rospy.Subscriber("/imu/data", Imu, receiveImu)
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
-    rospy.Subscriber("/locator/odom", PoseWithCovarianceStamped, updateRobotPose) 
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
-
+    rospy.Subscriber("/locator/odom", PoseWithCovarianceStamped, updateRobotPose)
     #Starting curses and ROS
     Thread(target = StartControl).start()
-    rospy.spin()
+    Thread(target = spin).start()

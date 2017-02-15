@@ -18,6 +18,8 @@ find_package(catkin REQUIRED COMPONENTS
   angles
   laser_assembler
   control_msgs
+  openslam_gmapping
+  map_server
 #  hratc2017_framework
 #  hratc2017_robot
 )
