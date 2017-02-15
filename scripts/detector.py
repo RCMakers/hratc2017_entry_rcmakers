@@ -79,8 +79,6 @@ def get_pose_distance(pose1, pose2):
 
 ########################## POSE FUNCTIONS ######################
 
-#REMOVE THESE AFTER NAVIGATOR STARTS PUBLISHING POSE DATA
-
 def updateRobotPose(ekfPose):
     global robotPose
     robotPose = ekfPose
@@ -253,8 +251,6 @@ if __name__ == '__main__':
     decTreeNearing = decTreeNearing.fit(X_train_nearing.toarray(), y_train_nearing)
     rospy.loginfo("trained trees")
     
-    rospy.wait_for_message("/robot_pose_ekf/odom", PoseWithCovarianceStamped, timeout=None)
-
     # Subscribing to relevant topics to bring the robot or simulation to live data
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)
     rospy.Subscriber("/robot_pose_ekf/odom", PoseWithCovarianceStamped, updateRobotPose, queue_size = 1)
