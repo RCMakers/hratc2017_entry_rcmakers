@@ -89,7 +89,18 @@ def updateRobotPose(ekfPose):
     poseCache = PoseWithCovarianceStamped()
     poseCache.pose = ekfPose.pose
     poseCache.header = ekfPose.header
+    
+    now = rospy.Time.now()
+    try:
+        transListener.waitForTransform('top_plate', 'metal_detector_support', now, rospy.Duration(2.0))    
+        (trans,rot) = transListener.lookupTransform('top_plate', 'metal_detector_support', now)
+    except:
+        return
+    
     tmp = poseCache.pose.pose.position.x
+    poseMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
+    poseCache.pose.pose=pose_msg_from_matrix(poseMat)
+    
     poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
     poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
     poseCache.pose.pose.position.x = poseCache.pose.pose.position.x
