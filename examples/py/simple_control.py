@@ -294,13 +294,15 @@ if __name__ == '__main__':
     # Initialize client node
     rospy.init_node('client')
     
+    navfile = open("/home/Users/rcmakers/hratc2017_workspace/navfile.csv", "w")
+    navfile.write("x,y,xekf,yekf\n") 
     transListener = tf.TransformListener()
 
     # Subscribing to all these topics to bring the robot or simulation to live data
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)
     rospy.Subscriber("/imu/data", Imu, receiveImu)
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
-    rospy.Subscriber("/robot_pose_ekf/odom", PoseWithCovarianceStamped, updateRobotPose) 
+    rospy.Subscriber("/locator/odom", PoseWithCovarianceStamped, updateRobotPose) 
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
 
     #Starting curses and ROS

@@ -9,6 +9,7 @@ from geometry_msgs.msg import Twist, Pose, PoseStamped, PoseWithCovariance, Pose
 from sensor_msgs.msg import LaserScan, Imu
 from metal_detector_msgs.msg._Coil import Coil
 from std_msgs.msg import Bool
+from nav_msgs.msg import Odometry
 from tf import transformations
 from sklearn.datasets import load_svmlight_file
 from sklearn import tree
@@ -25,6 +26,7 @@ rightCoilPose = PoseStamped()
 minePose = PoseStamped()
 
 robotPose = PoseWithCovarianceStamped()
+robotTwistMeasured = Twist()
 
 
 minePositions = []
@@ -44,7 +46,9 @@ rightCoilMedians = []
 
 bufferFull = False
 
-
+distanceFromCenterX = 4.5
+distanceFromCenterY = 5.0
+robotLength = 0.5
 
 ######################### AUXILIARY FUNCTIONS ############################
 
@@ -80,9 +84,16 @@ def get_pose_distance(pose1, pose2):
 ########################## POSE FUNCTIONS ######################
 
 def updateRobotPose(ekfPose):
-    global robotPose
-    robotPose = ekfPose
-    updateCoilPoseManually(robotPose.pose.pose)
+    global robotPose, robotTwistMeasured, transListener
+    robotTwistMeasured = ekfPose.twist
+    poseCache = PoseWithCovarianceStamped()
+    poseCache.pose = ekfPose.pose
+    poseCache.header = ekfPose.header
+    tmp = poseCache.pose.pose.position.x
+    poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
+    poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
+    poseCache.pose.pose.position.x = poseCache.pose.pose.position.x
+    updateCoilPoseManually(robotPose.pose.pose)    
 
 def updateCoilPoseManually(referencePose):
     global transListener, leftCoilPose, rightCoilPose
@@ -253,5 +264,5 @@ if __name__ == '__main__':
     
     # Subscribing to relevant topics to bring the robot or simulation to live data
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)
-    rospy.Subscriber("/robot_pose_ekf/odom", PoseWithCovarianceStamped, updateRobotPose, queue_size = 1)
+    rospy.Subscriber("/odometry/filtered", Odometry, updateRobotPose, queue_size = 1)
     rospy.spin()

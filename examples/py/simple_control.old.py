@@ -10,7 +10,6 @@ from sensor_msgs.msg import LaserScan, Imu
 from metal_detector_msgs.msg._Coil import Coil
 from tf import transformations
 
-navfile = open('navfile.csv', 'w')
 
 # read/write stuff on screen
 std = None
@@ -63,10 +62,7 @@ def pose_msg_from_matrix(transformation):
 
 def updateRobotPose(ekfPose):
     global robotPose
-
-    # This function does not get the true robot pose, but only the pose of 'base_link' in the TF
-    # you should replace it by the robot pose resulting from a good localization process 
-
+    # you should replace it by the robot pose resulting from a good localization proc
     robotPose = PoseStamped()
     now = rospy.Time.now()
     # Get left coil position in relation to robot
@@ -75,7 +71,6 @@ def updateRobotPose(ekfPose):
         (trans,rot) = transListener.lookupTransform('minefield', 'base_link', now)
     except:
         return
-
     tr2 = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
     robotPose.pose = pose_msg_from_matrix(tr2)
     navfile.write(str(robotPose.pose.position.x)+","+str(robotPose.pose.position.y)+","+str(ekfPose.pose.pose.position.x)+","+str(ekfPose.pose.pose.position.y)+"\n")
@@ -245,14 +240,14 @@ if __name__ == '__main__':
     rospy.init_node('client')
 
     transListener = tf.TransformListener()
-
+    navfile = open("/home/rcmakers/hratc2017_workspace/navfile.csv", "w")
     navfile.write("x,y,xekf,yekf\n")
     # Subscribing to all these topics to bring the robot or simulation to live data
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)
     rospy.Subscriber("/imu/data", Imu, receiveImu)
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
-    rospy.Subscriber("/robot_pose_ekf/odom", PoseWithCovarianceStamped, updateRobotPose)
+    rospy.Subscriber("/locator/odom", PoseWithCovarianceStamped, updateRobotPose)
     #Starting curses and ROS
     Thread(target = StartControl).start()
     Thread(target = spin).start()
