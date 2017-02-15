@@ -25,6 +25,6 @@
      <param name="imu0_relative" value="true"/>
      <param name="imu0_remove_gravitational_acceleration" value="true"/>
    </node>   
-   <node name="navigator" pkg="hratc2017_entry_rcmakers" type="navigator.py" respawn="true" output="screen"/>
+   <node name="navigator" pkg="hratc2017_entry_rcmakers" type="nav1.py" respawn="true" output="screen"/> 
    <node name="detector" pkg="hratc2017_entry_rcmakers" type="detector.py" respawn="true" output="screen"/>
 </launch>

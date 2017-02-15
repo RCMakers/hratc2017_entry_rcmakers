@@ -11,7 +11,8 @@ This package is team RCMakers's submission for the HRATC 2017.
 
 ### ROS Packages
 `metal_detector_msgs`  
-`roscpp`  
+`roscpp` 
+`nav_msgs`   
 `rospy`  
 `tf`  
 `std_msgs`  

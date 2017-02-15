@@ -9,12 +9,15 @@ from geometry_msgs.msg import Twist, Pose, PoseStamped, PoseWithCovariance, Pose
 from sensor_msgs.msg import LaserScan, Imu
 from metal_detector_msgs.msg._Coil import Coil
 from tf import transformations
-
+from nav_msgs.msg import Odometry
 
 # read/write stuff on screen
 std = None
 
 offsetWritten = False
+
+distanceFromCenterX = 4.5
+distanceFromCenterY = 5.0
 
 radStep = deg2rad(15)
 linStep = 0.1
@@ -61,6 +64,19 @@ def pose_msg_from_matrix(transformation):
 ######################### GETTING POSES FROM TF ############################
 
 def updateRobotPose(ekfPose):
+    global robotPose, robotTwistMeasured
+    poseCache = PoseStamped()
+    poseCache.pose = ekfPose.pose.pose
+    poseCache.header = ekfPose.header
+    tmp = poseCache.pose.position.x
+    poseCache.pose.position.x = poseCache.pose.position.y+distanceFromCenterX
+    poseCache.pose.position.y = -tmp+distanceFromCenterY
+    poseCache.pose.position.x = poseCache.pose.position.x+0.5*np.sin(np.pi*poseCache.pose.orientation.z)
+    poseCache.pose.position.y = poseCache.pose.position.y+0.5*np.cos(np.pi*poseCache.pose.orientation.z)    
+    robotPose = poseCache
+    updateCoilPoseManually(robotPose.pose)
+
+def _updateRobotPose(ekfPose):
     global robotPose
     # you should replace it by the robot pose resulting from a good localization proc
     robotPose = PoseStamped()
@@ -148,8 +164,6 @@ def receiveCoilSignal(actualCoil):
     global coils
     coils = actualCoil
 
-    updateCoilPoseManually(robotPose.pose)  
-
 ######################### CURSES STUFF ############################
 
 # Printing data on screen
@@ -175,7 +189,7 @@ def showStats():
         std.addstr(20, 0 , "Laser Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfo.ranges), min(laserInfo.ranges), max(laserInfo.ranges)))
     if laserInfoHokuyo.ranges != []:
         std.addstr(21, 0 , "Laser Hokuyo Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfoHokuyo.ranges), min(laserInfoHokuyo.ranges), max(laserInfoHokuyo.ranges)))
-
+    std.addstr(22,0, "Orientation x: {} y: {} z: {}".format(robotPose.pose.orientation.x, robotPose.pose.orientation.y, robotPose.pose.orientation.z))
     std.refresh()
 
 # Basic control
@@ -247,7 +261,7 @@ if __name__ == '__main__':
     rospy.Subscriber("/imu/data", Imu, receiveImu)
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
-    rospy.Subscriber("/locator/odom", PoseWithCovarianceStamped, updateRobotPose)
+    rospy.Subscriber("/odometry/filtered", Odometry, updateRobotPose)
     #Starting curses and ROS
     Thread(target = StartControl).start()
     Thread(target = spin).start()

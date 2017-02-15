@@ -9,6 +9,7 @@ from geometry_msgs.msg import Twist, Pose, PoseStamped, PoseWithCovariance, Pose
 from sensor_msgs.msg import LaserScan, Imu
 from metal_detector_msgs.msg._Coil import Coil
 from tf import transformations
+from nav_msgs.msg import Odometry
 
 # read/write stuff on screen
 std = None
@@ -18,6 +19,8 @@ robotTwistMeasured = Twist()
 distanceFromCenterX = 4.5
 distanceFromCenterY = 5.0
 robotLength = 0.5
+
+pubVel = rospy.Publisher('p3at/cmd_vel', Twist, queue_size=1)
 
 robotPose = PoseWithCovarianceStamped()
 initialPose = PoseWithCovarianceStamped()
@@ -79,7 +82,7 @@ def recieveMine(MineNow):
     mines.append[MineNow]
 
 def updateRobotPose(ekfPose):
-    global robotPose, robotTwistMeasured, transListener
+    global robotPose, robotTwistMeasured
     robotTwistMeasured = ekfPose.twist
     poseCache = PoseWithCovarianceStamped()
     poseCache.pose = ekfPose.pose
@@ -93,76 +96,133 @@ def updateRobotPose(ekfPose):
 
 def checkMine():
     for mine in mines:
-        if get_pose_distance(mine,robotPose) <= 0.8:
+        if get_pose_distance(mine.pose,robotPose.pose.pose) <= 0.8:
             return True
     return False 
 def turnAround():
-    if abs(robotPose.pose.orientation.z) < 0.3:
-        while robotPose.pose.orientation.z > -0.68: #turn left
+    if abs(robotPose.pose.pose.orientation.z) < 0.3:
+        while robotPose.pose.pose.orientation.z > -0.68: #turn left
             robotTwist.angular.z = -0.3
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.angular.z = 0.0 
         pubVel.publish(robotTwist)
 
 
         obstaclePose = robotPose
 
-        while get_pose_distance(obstaclePose, robotPose) < 1: #go forward for 1 unit
+        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 1: #go forward for 1 unit
             robotTwist.linear.x = 0.2
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.linear.x = 0.0 
         pubVel.publish(robotTwist)
 
-        while robotPose.pose.orientation.z < 0.96: #turn right
+        while robotPose.pose.pose.orientation.z < 0.96: #turn right
             robotTwist.angular.z = -0.3
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.angular.z = 0.0 
         pubVel.publish(robotTwist)
 
         obstaclePose = robotPose  
 
         stepPose = robotPose
-        stepPose.pose.position.x += 10
+        stepPose.pose.pose.position.x += 10
         return stepPose
 
-    elif abs(robotPose.pose.orientation.z) < 0.7:
-        while robotPose.pose.orientation.z < -0.68 or robotPose.pose.orientation.z > 0: #turn left
+    elif abs(robotPose.pose.pose.orientation.z) < 0.7:
+        while robotPose.pose.pose.orientation.z < -0.68 or robotPose.pose.pose.orientation.z > 0: #turn left
             robotTwist.angular.z = 0.3
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.angular.z = 0.0 
         pubVel.publish(robotTwist)
 
 
         obstaclePose = robotPose
 
-        while get_pose_distance(obstaclePose, robotPose) < 1: #go forward for 1 unit
+        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 1: #go forward for 1 unit
             robotTwist.linear.x = 0.2
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.linear.x = 0.0 
         pubVel.publish(robotTwist)
 
-        while robotPose.pose.orientation.z < -0.02: #turn left
+        while robotPose.pose.pose.orientation.z < -0.02: #turn left
             robotTwist.angular.z = 0.3
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.angular.z = 0.0 
         pubVel.publish(robotTwist)
 
         stepPose = robotPose
-        stepPose.pose.position.x -= 10
+        stepPose.pose.pose.position.x -= 10
         return stepPose
 
 def avoidObstacle():
-    if abs(robotPose.pose.orientation.z) < 0.3: #if going down
-        while robotPose.pose.orientation.z > -0.68: #turn right
+    if abs(robotPose.pose.pose.orientation.z) < 0.3: #if going down
+        while robotPose.pose.pose.orientation.z > -0.68: #turn right
             robotTwist.angular.z = -0.3
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
+        robotTwist.angular.z = 0.0 
+        pubVel.publish(robotTwist)
+
+        obstaclePose = robotPose
+
+        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 1: #go forward for 1 unit
+            robotTwist.linear.x = 0.2
+            pubVel.publish(robotTwist)
+            #time.sleep(0.1)
+        robotTwist.linear.x = 0.0 
+        pubVel.publish(robotTwist)
+
+        while robotPose.pose.pose.orientation.z < -0.01: #turn left
+            robotTwist.angular.z = 0.3
+            pubVel.publish(robotTwist)
+            #time.sleep(0.1)
+        robotTwist.angular.z = 0.0 
+        pubVel.publish(robotTwist)
+
+        obstaclePose = robotPose  
+
+        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 2: #go forward for 2 unit
+            robotTwist.linear.x = 0.2
+            pubVel.publish(robotTwist)
+            #time.sleep(0.1)
+        robotTwist.linear.x = 0.0 
+        pubVel.publish(robotTwist)
+
+        while robotPose.pose.pose.orientation.z < 0.68: #turn left
+            robotTwist.angular.z = 0.3
+            pubVel.publish(robotTwist)
+            #time.sleep(0.1)
+        robotTwist.angular.z = 0.0 
+        pubVel.publish(robotTwist)
+        obstaclePose = robotPose 
+
+
+        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 1: #go forward for 1 unit
+            robotTwist.linear.x = 0.2
+            pubVel.publish(robotTwist)
+            #time.sleep(0.1)
+        robotTwist.linear.x = 0.0 
+        pubVel.publish(robotTwist)
+
+        while robotPose.pose.pose.orientation.z > 0.01: #turn right
+            robotTwist.angular.z = -0.3
+            pubVel.publish(robotTwist)
+            #time.sleep(0.1)
+        robotTwist.angular.z = 0.0 
+        pubVel.publish(robotTwist)
+
+
+    elif abs(robotPose.pose.pose.orientation.z) > 0.7:
+        while robotPose.pose.pose.orientation.z < -0.68 or robotPose.pose.orientation.z > 0: #turn left
+            robotTwist.angular.z = 0.3
+            pubVel.publish(robotTwist)
+            #time.sleep(0.1)
         robotTwist.angular.z = 0.0 
         pubVel.publish(robotTwist)
 
@@ -171,14 +231,14 @@ def avoidObstacle():
         while get_pose_distance(obstaclePose, robotPose) < 1: #go forward for 1 unit
             robotTwist.linear.x = 0.2
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.linear.x = 0.0 
         pubVel.publish(robotTwist)
 
-        while robotPose.pose.orientation.z < -0.01: #turn left
-            robotTwist.angular.z = 0.3
+        while robotPose.pose.pose.orientation.z < 0.96: #turn right
+            robotTwist.angular.z = -0.3
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.angular.z = 0.0 
         pubVel.publish(robotTwist)
 
@@ -187,71 +247,14 @@ def avoidObstacle():
         while get_pose_distance(obstaclePose, robotPose) < 2: #go forward for 2 unit
             robotTwist.linear.x = 0.2
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.linear.x = 0.0 
         pubVel.publish(robotTwist)
 
-        while robotPose.pose.orientation.z < 0.68: #turn left
-            robotTwist.angular.z = 0.3
-            pubVel.publish(robotTwist)
-            time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-        obstaclePose = robotPose 
-
-
-        while get_pose_distance(obstaclePose, robotPose) < 1: #go forward for 1 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.orientation.z > 0.01: #turn right
+        while robotPose.pose.pose.orientation.z > 0.68 or robotPose.pose.orientation.z < 0: #turn right
             robotTwist.angular.z = -0.3
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-
-    elif abs(robotPose.pose.orientation.z) > 0.7:
-        while robotPose.pose.orientation.z < -0.68 or robotPose.pose.orientation.z > 0: #turn left
-            robotTwist.angular.z = 0.3
-            pubVel.publish(robotTwist)
-            time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-        obstaclePose = robotPose
-
-        while get_pose_distance(obstaclePose, robotPose) < 1: #go forward for 1 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.orientation.z < 0.96: #turn right
-            robotTwist.angular.z = -0.3
-            pubVel.publish(robotTwist)
-            time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-        obstaclePose = robotPose  
-
-        while get_pose_distance(obstaclePose, robotPose) < 2: #go forward for 2 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.orientation.z > 0.68 or robotPose.pose.orientation.z < 0: #turn right
-            robotTwist.angular.z = -0.3
-            pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.angular.z = 0.0 
         pubVel.publish(robotTwist)
         obstaclePose = robotPose 
@@ -259,14 +262,14 @@ def avoidObstacle():
         while get_pose_distance(obstaclePose, robotPose) < 1: #go forward for 1 unit
             robotTwist.linear.x = 0.2
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.linear.x = 0.0 
         pubVel.publish(robotTwist)
 
-        while robotPose.pose.orientation.z > 0.96: #turn left
+        while robotPose.pose.pose.orientation.z > 0.96: #turn left
             robotTwist.angular.z = 0.3
             pubVel.publish(robotTwist)
-            time.sleep(0.1)
+            #time.sleep(0.1)
         robotTwist.angular.z = 0.0 
         pubVel.publish(robotTwist)
 
@@ -278,7 +281,9 @@ def Traverse(stdscr):
     logstr = "" 
     k = None
     direction = -1
-    initialPose = goalPose = robotPose
+    initialPose = robotPose
+    stepPose = robotPose
+    stepPose.pose.pose.position.x -= 10
     global std
     std = stdscr
     #publishing topics
@@ -288,9 +293,9 @@ def Traverse(stdscr):
     # While 'Esc' is not pressed
     while k != chr(27):
         
-        if get_pose_distance(goalPose, initialPose) <= 0.3:
+        if get_pose_distance(goalPose.pose.pose, initialPose.pose.pose) <= 0.3:
             stepPose = turnAround()
-        elif checkMine() or (min(laserInfoHokuyo.ranges) <= 0.8):
+        elif checkMine() <= 0.8:
             avoidObstacle()
         else:
             robotTwist.linear.x = 0.3
@@ -302,7 +307,7 @@ def Traverse(stdscr):
         except:
             k = None
 
-            time.sleep(0.1)
+            #time.sleep(0.1)
 
     stdscr.keypad(False)
     rospy.signal_shutdown("Shutdown Competitor")
@@ -325,7 +330,7 @@ if __name__ == '__main__':
     rospy.Subscriber("/HRATC_FW/set_mine", PoseStamped, recieveMine, queue_size = 10)
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
-    rospy.Subscriber("/locator/odom", PoseWithCovarianceStamped, updateRobotPose)
+    rospy.Subscriber("/odometry/filtered", Odometry, updateRobotPose)
 
     #Starting curses and ROS
     Thread(target = StartControl).start()
