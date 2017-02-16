@@ -131,9 +131,6 @@ add_dependencies(get_data_node metal_detector_msgs_generate_messages_py)
 # target_link_libraries(hratc2016_entry_template_node
 #   ${catkin_LIBRARIES}
 # )
-target_link_libraries(random_walk_simple_node ${catkin_LIBRARIES})
-target_link_libraries(set_mine_node ${catkin_LIBRARIES})
-target_link_libraries(get_data_node ${catkin_LIBRARIES})
 
 #############
 ## Install ##
