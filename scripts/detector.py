@@ -46,8 +46,8 @@ rightCoilMedians = []
 
 bufferFull = False
 
-distanceFromCenterX = 4.5
-distanceFromCenterY = 5.0
+distanceFromCenterX = 5.0
+distanceFromCenterY = 4.5
 robotLength = 0.5
 
 ######################### AUXILIARY FUNCTIONS ############################
@@ -76,8 +76,8 @@ def pose_msg_from_matrix(transformation):
 def get_pose_distance(pose1, pose2):
     matrix1 = matrix_from_pose_msg(pose1)
     matrix2 = matrix_from_pose_msg(pose2)
-    rospy.loginfo("matrix1: "+str(matrix1))
-    rospy.loginfo("matrix2: "+str(matrix2))
+    #rospy.loginfo("matrix1: "+str(matrix1))
+    #rospy.loginfo("matrix2: "+str(matrix2))
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
 
 
@@ -102,12 +102,14 @@ def updateRobotPose(ekfPose):
     correctedMat = np.dot(poseMat,poseErrorMat)
     
     poseCache.pose.pose=pose_msg_from_matrix(correctedMat)
+    updateCoilPoseManually(poseCache.pose.pose)
+
     tmp = poseCache.pose.pose.position.x
     poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
     poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
 
     robotPose = poseCache
-    updateCoilPoseManually(robotPose.pose.pose)    
+        
 
 def updateCoilPoseManually(referencePose):
     global transListener, leftCoilPose, rightCoilPose
@@ -133,33 +135,51 @@ def updateCoilPoseManually(referencePose):
     corrected_Mat_L = np.dot(robot_Mat, localCoil_Mat_L)
     corrected_Mat_R = np.dot(robot_Mat, localCoil_Mat_R)
 
+    poseCacheL = PoseStamped()
+    poseCacheR = PoseStamped()
+
     leftCoilPose = PoseStamped()
     leftCoilPose.pose = pose_msg_from_matrix(corrected_Mat_L)
+    
+    poseCacheL = leftCoilPose
+    tmp = poseCacheL.pose.position.x
+    poseCacheL.pose.position.x = poseCacheL.pose.position.y+distanceFromCenterX
+    poseCacheL.pose.position.y = -tmp+distanceFromCenterY
+    
+    leftCoilPose = poseCacheL    
+
     rightCoilPose = PoseStamped()
     rightCoilPose.pose = pose_msg_from_matrix(corrected_Mat_R)
+    
+    poseCacheR = rightCoilPose
+    tmp = poseCacheR.pose.position.x
+    poseCacheR.pose.position.x = poseCacheR.pose.position.y+distanceFromCenterX
+    poseCacheR.pose.position.y = -tmp+distanceFromCenterY
+    
+    rightCoilPose = poseCacheR
 
 ########################## MAIN PROCESSING ###############################
 
 # Wrapper function
 def detectorWrapper():
-    rospy.loginfo("Wrapper C1 "+str(bufferFull)+" leftCoilMeans length "+str(len(leftCoilMeans)))
+    #rospy.loginfo("Wrapper C1 "+str(bufferFull)+" leftCoilMeans length "+str(len(leftCoilMeans)))
     if bufferFull and len(leftCoilMeans) >= DERIVATIVE_WINDOW_LENGTH:
-        rospy.loginfo("Wrapper C2")
+        #rospy.loginfo("Wrapper C2")
         #isMineNear()
         if isMine():
-            rospy.loginfo("LEFTCOIL"+str(leftCoilPose.pose.position))
+            #rospy.loginfo("LEFTCOIL"+str(leftCoilPose.pose.position))
             global minePose
             if coils.left_coil > coils.right_coil:
                 minePose = leftCoilPose
             else:
                 minePose = rightCoilPose
-            rospy.loginfo("Wrapper C3")
+            #rospy.loginfo("Wrapper C3")
             if isUniqueMine(minePose.pose):
                 pubMine = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped, queue_size = 1, latch = True)
                 pubMine.publish(minePose)
-                rospy.loginfo("minePose:"+str(minePose.pose))
+                #rospy.loginfo("minePose:"+str(minePose.pose))
                 minePositions.append(minePose.pose)
-                rospy.loginfo("Wrapper C4")
+                #rospy.loginfo("Wrapper C4")
             
 # Detect based on decision tree
 def isMine():
@@ -206,7 +226,7 @@ def isMineNear():
     prediction = decTreeNearing.predict(coilData)
     
     if prediction:
-        rospy.loginfo("MINE NEAR"+str(coilData))
+        #rospy.loginfo("MINE NEAR"+str(coilData))
         rospy.sleep(5)
         mineNear = Bool()
         mineNear.data = True
@@ -215,12 +235,12 @@ def isMineNear():
 
 # Check if mine is within range of current known mines
 def isUniqueMine(newMine):
-    rospy.loginfo("isUniqueMine started "+str(minePositions))
+    #rospy.loginfo("isUniqueMine started "+str(minePositions))
     if len(minePositions) == 0:
         return True
     for mine in minePositions:
         dist = get_pose_distance(newMine, mine)
-        rospy.loginfo("isUniqueMine distance: "+str(dist))
+        #rospy.loginfo("isUniqueMine distance: "+str(dist))
         if dist<=1:
             return False
     return True
@@ -248,15 +268,15 @@ def receiveCoilSignal(actualCoil):
             leftCoilMedians.pop(0)
             rightCoilMeans.pop(0)
             rightCoilMedians.pop(0)
-    rospy.loginfo("coilSignalBuffer"+str(coilLeftSignalBuffer))
-    rospy.loginfo("derivativeWindow"+str(leftCoilMeans))
+    #rospy.loginfo("coilSignalBuffer"+str(coilLeftSignalBuffer))
+    #rospy.loginfo("derivativeWindow"+str(leftCoilMeans))
     detectorWrapper()  
 
 if __name__ == '__main__':    
      
     # Initialize detector node
     rospy.init_node('detector')
-    rospy.loginfo("Node initialized")
+    #rospy.loginfo("Node initialized")
     transListener = tf.TransformListener()
 
     decTree = tree.DecisionTreeClassifier()
@@ -268,13 +288,13 @@ if __name__ == '__main__':
     detectionTrainPath = os.path.join(directory, '..', 'data', 'training.txt')
     nearingTrainPath = os.path.join(directory, '..', 'data', 'nearingtraining.txt')
 
-    rospy.loginfo("start training trees")
+    #rospy.loginfo("start training trees")
     X_train, y_train = load_svmlight_file(detectionTrainPath)
     decTree = decTree.fit(X_train.toarray(), y_train)
 
     X_train_nearing, y_train_nearing = load_svmlight_file(nearingTrainPath)
     decTreeNearing = decTreeNearing.fit(X_train_nearing.toarray(), y_train_nearing)
-    rospy.loginfo("trained trees")
+    #rospy.loginfo("trained trees")
     
     # Subscribing to relevant topics to bring the robot or simulation to live data
     rospy.Subscriber("/coils", Coil, receiveCoilSignal, queue_size = 1)

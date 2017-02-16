@@ -18,7 +18,7 @@ std = None
 robotTwist = Twist()
 robotTwistMeasured = Twist()
 distanceFromCenterX = 5.0
-distanceFromCenterY = 5.0
+distanceFromCenterY = 4.5
 robotLength = 0.5
 pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
 robotPose = PoseWithCovarianceStamped()
@@ -38,15 +38,22 @@ laserInfoHokuyo = LaserScan()
 arenaWidth = 10
 arenaHeight = 10
 
-minAngle = 0.4
+minAngle = 0.2
 
 pointsToVisit = []
 pointStep = 2
-reachedTargetPoint = True
+reachedTargetPoint = False
+
+nearMine = False
 
 targetPointDistance = 1.0
 minObstacleDistance = 0.3
-minMineDistance = 0.5
+minMineDistance = 2.0
+
+obstaclePresent = False
+startedTurningAway = False
+angleToObstacle = 0.0
+minObstacleAngle = 0.5
 
 minMineAngle = 0.5
 
@@ -85,8 +92,8 @@ def pose_msg_from_matrix(transformation):
 def get_pose_distance(pose1, pose2):
     matrix1 = matrix_from_pose_msg(pose1)
     matrix2 = matrix_from_pose_msg(pose2)
-    rospy.loginfo("matrix1: "+str(matrix1))
-    rospy.loginfo("matrix2: "+str(matrix2))
+    #rospy.loginfo("matrix1: "+str(matrix1))
+    #rospy.loginfo("matrix2: "+str(matrix2))
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
 
 def linear_map(x, in_min, in_max, out_min, out_max):
@@ -113,8 +120,8 @@ def receiveLaserHokuyo(LaserNow):
     laserInfoHokuyo = LaserNow
 
 def receiveMine(MineNow):
-    global minePose
-    global mines
+    global minePose, nearMine, mines
+    nearMine = True
     minePose = MineNow
     mines.append[MineNow]
 
@@ -124,7 +131,7 @@ def receiveCoil(actualCoil):
 
 
 def updateRobotPose(ekfPose):
-    global robotPose, robotTwistMeasured, transListener, pointsToVisit
+    global robotPose, robotTwistMeasured, transListener, pointsToVisit, robotTwist
     robotTwistMeasured = ekfPose.twist
     poseCache = PoseWithCovarianceStamped()
     poseCache.pose = ekfPose.pose
@@ -147,29 +154,59 @@ def updateRobotPose(ekfPose):
     poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
 
     robotPose = poseCache
-    rospy.loginfo("robotPose: "+str(robotPose.pose.pose))
+    #rospy.loginfo("robotPose: "+str(robotPose.pose.pose))
+    
 
     rospy.loginfo("pointsToVisit: "+str(len(pointsToVisit)))
     rospy.loginfo("targetPoint: "+str(targetPoint.position))
     
     robotTwist = Twist()
+
+    if len(mines) > 0:
+        for mine in mines:
+            if get_pose_distance(robotPose.pose.pose, mine.pose) <= minMineDistance:
+                if abs(angleToPoint(mine.pose, robotPose.pose.pose)) <= minMineAngle:
+                    global pathObstructed, reachedTargetPoint, nearMine
+                    nearMine = True
+                    robotTwist.linear.x = 0.0  
+
     if len(pointsToVisit) == 0:
         pubVel = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
         robotTwist = Twist()
         pubVel.publish(robotTwist)
-        rospy.signal_shutdown("all points visited")   
-    rospy.loginfo("distance to target: "+str(get_pose_distance(robotPose.pose.pose, targetPoint)))
-    if get_pose_distance(robotPose.pose.pose, targetPoint) <= targetPointDistance or get_pose_distance(robotPose.pose.pose, targetPoint) > previousTargetDistance:
-        global reachedTargetPoint, previousTargetDistance
+        rospy.signal_shutdown("all points visited")
+
+    if nearMine and len(mines) > 0:
+        leastMineDistance = 100.0
+        closestMine = PoseStamped()
+        for mine in mines:
+            if get_pose_distance(mine.pose, robotPose.pose.pose) < leastMineDistance:
+                closestMine.pose.position.x = mine.pose.position.x
+                closestMine.pose.position.y = mine.pose.position.y
+                leastMineDistance = get_pose_disance(mine.pose, robotPose.pose.pose)
+        if abs(angleToPoint(closestMine.pose, robotPose.pose.pose)) <= minMineAngle or get_pose_distance(closestMine.pose, robotPose.pose.pose) <= minMineDistance:
+            robotTwist.linear.x = -0.5
+            robotTwist.angular.z = -0.5
+        else:
+            global nearMine, reachedTargetPoint, pathObstructed
+            nearMine = False
+            reachedTargetPoint = True
+            pathObstructed = True
+            
+
+    #rospy.loginfo("distance to target: "+str(get_pose_distance(robotPose.pose.pose, targetPoint)))
+    if get_pose_distance(robotPose.pose.pose, targetPoint) <= targetPointDistance:
+        global reachedTargetPoint
         reachedTargetPoint = True
-        previousTargetDistance = get_pose_distance(robotPose.pose.pose, targetPoint)
     else:
         if abs(angleToPoint(targetPoint, robotPose.pose.pose)) <= minAngle:
-            for i in laserInfo.ranges[360:450]:
+            for i in laserInfo.ranges[270:540]:
                 if i <= minObstacleDistance:
-                    global pathObstructed, reachedTargetPoint
+                    global pathObstructed, reachedTargetPoint, obstaclePresent, startedTurningAway
                     pathObstructed = True
                     reachedTargetPoint = True
+                    obstaclePresent = True
+                    startedTurningAway = True
                     robotTwist.linear.x = 0.0
         if len(mines) > 0:
             for mine in mines:
@@ -180,40 +217,71 @@ def updateRobotPose(ekfPose):
                       reachedTargetPoint = True
                       robotTwist.linear.x = 0.0
                       
+        rospy.loginfo("angleToPoint: "+str(angleToPoint(targetPoint, robotPose.pose.pose)))
+        if angleToPoint(targetPoint, robotPose.pose.pose) > minAngle:
+            robotTwist.angular.z = -0.5
+            robotTwist.linear.x = 0.0
+        elif angleToPoint(targetPoint, robotPose.pose.pose) < -minAngle:
+            robotTwist.angular.z = 0.5
+            robotTwist.linear.x = 0.0
         if not pathObstructed:
-            rospy.loginfo("angleToPoint: "+str(angleToPoint(targetPoint, robotPose.pose.pose)))
-            if angleToPoint(targetPoint, robotPose.pose.pose) > minAngle:
-                robotTwist.angular.z = -0.5
-                robotTwist.linear.x = 0.0
-            elif angleToPoint(targetPoint, robotPose.pose.pose) < -minAngle:
-                robotTwist.angular.z = 0.5
-                robotTwist.linear.x = 0.0
-            else:
+            if abs(angleToPoint(targetPoint, robotPose.pose.pose)) <= minAngle:
                 robotTwist.linear.x = 0.5 
                 robotTwist.angular.z = 0.0
 
     if reachedTargetPoint:
         robotTwist.linear.x = 0.0
         global reachedTargetPoint
-        reachedTargetPoint = False
         global targetPoint
         targetPoint = Pose()
         leastDistance = 100.0
+        leastAngle = 5.0
         for pose in pointsToVisit:
             if get_pose_distance(robotPose.pose.pose, pose) < leastDistance and targetPoint.position.x != pose.position.x and targetPoint.position.y != pose.position.y:
                 targetPoint.position.x = pose.position.x
                 targetPoint.position.y = pose.position.y
-                leastDistance = get_pose_distance(robotPose.pose.pose, pose)
+                leastDistance = get_pose_distance(robotPose.pose.pose, targetPoint)
         if not pathObstructed:
             for p in range(0, len(pointsToVisit)-1):
                 if targetPoint.position.x == pointsToVisit[p].position.x and targetPoint.position.y == pointsToVisit[p].position.y:
                     pointsToVisit.pop(p)
+                    reachedTargetPoint = False
                     break
         if pathObstructed:
-            global pathObstructed
-            pathObstructed = False
-        if robotTwist.linear.x >= 0.5 and (coils.left_coil >= 0.6 or coils.right_coil >= 0.6):
-            robotTwist.linear.x = 0.2
+            if obstaclePresent:
+                if startedTurningAway:
+                    global startedTurningAway, angleToObstacle
+                    startedTurningAway = False
+                    angleToObstacle = robotPose.pose.pose.orientation.z
+                    robotTwist.linear.x = 0.0
+                    robotTwist.angular.z = 0.5
+                else:
+                    if (robotPose.pose.pose.orientation.z - angleToObstacle) < minObstacleAngle:
+                        robotTwist.linear.x = 0.0
+                        robotTwist.angular.z = 0.5
+                    else:
+                        robotTwist.linear.x = 0.0
+                        robotTwist.angular.z = 0.0
+                        global obstaclePresent
+                        obstaclePresent = False
+            else:
+                leastDistance = 100.0
+                leastAngle = 5.0
+                targetPoint = Pose()
+                robotTwist.linear.x = 0.0
+                robotTwist.angular.z = 0.0
+                for pose in pointsToVisit:
+                    if get_pose_distance(robotPose.pose.pose, pose) < leastDistance and abs(angleToPoint(pose, robotPose.pose.pose)) < leastAngle:
+                        targetPoint.position.x = pose.position.x
+                        targetPoint.position.y = pose.position.y
+                        leastDistance = get_pose_distance(robotPose.pose.pose, pose)
+                        leastAngle = abs(angleToPoint(pose, robotPose.pose.pose))
+                global pathObstructed, reachedTargetPoint
+                pathObstructed = False
+                reachedTargetPoint = False
+            
+    if robotTwist.linear.x >= 0.5 and (coils.left_coil >= 0.6 or coils.right_coil >= 0.6):
+        robotTwist.linear.x = 0.2
                  
 
     pubVel = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
@@ -235,8 +303,12 @@ if __name__ == '__main__':
             count2 = count2+pointStep
         count = count+pointStep
 
+    global targetPoint
+    targetPoint.position.x = pointsToVisit[0].position.x
+    targetPoint.position.y = pointsToVisit[0].position.y
+
     # Subscribing to all these topics to bring the robot or simulation to live data
-    rospy.Subscriber("/HRATC_FW/set_mine", PoseStamped, receiveMine, queue_size = 10)
+    rospy.Subscriber("/HRATC_FW/set_mine", PoseStamped, receiveMine, queue_size = 1)
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
     rospy.Subscriber("/coils", Coil, receiveCoil)
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
