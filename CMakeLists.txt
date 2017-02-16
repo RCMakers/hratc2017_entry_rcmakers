@@ -118,14 +118,10 @@ include_directories(include ${Boost_INCLUDE_DIR} ${catkin_INCLUDE_DIRS} ${GAZEBO
 
 ## Declare a cpp executable
 # add_executable(hratc2016_entry_template_node src/hratc2016_entry_template_node.cpp)
-add_executable(random_walk_simple_node examples/cpp/random_walk_simple.cpp)
-add_executable(set_mine_node examples/cpp/set_mine.cpp)
-add_executable(get_data_node examples/cpp/get_data.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 # add_dependencies(hratc2016_entry_template_node hratc2016_entry_template_generate_messages_cpp)
-add_dependencies(get_data_node metal_detector_msgs_generate_messages_py)
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(hratc2016_entry_template_node
