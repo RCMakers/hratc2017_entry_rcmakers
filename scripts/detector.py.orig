@@ -47,7 +47,7 @@ rightCoilMedians = []
 bufferFull = False
 
 distanceFromCenterX = 4.5
-distanceFromCenterY = 5.0
+distanceFromCenterY = 4.5
 robotLength = 0.5
 
 ######################### AUXILIARY FUNCTIONS ############################
@@ -89,7 +89,11 @@ def updateRobotPose(ekfPose):
     poseCache = PoseWithCovarianceStamped()
     poseCache.pose = ekfPose.pose
     poseCache.header = ekfPose.header
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 6532cdd2aa2287e91dbc8a1b4399792c112797c6
     now = rospy.Time.now()
     try:
         transListener.waitForTransform('top_plate', 'metal_detector_support', now, rospy.Duration(2.0))    
@@ -102,10 +106,15 @@ def updateRobotPose(ekfPose):
     correctedMat = np.dot(poseMat,poseErrorMat)
     
     poseCache.pose.pose=pose_msg_from_matrix(correctedMat)
+<<<<<<< HEAD
+
+=======
+    
+>>>>>>> 6532cdd2aa2287e91dbc8a1b4399792c112797c6
     tmp = poseCache.pose.pose.position.x
     poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
     poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
-
+    
     robotPose = poseCache
     updateCoilPoseManually(robotPose.pose.pose)    
 

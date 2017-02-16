@@ -64,15 +64,28 @@ def pose_msg_from_matrix(transformation):
 ######################### GETTING POSES FROM TF ############################
 
 def updateRobotPose(ekfPose):
-    global robotPose, robotTwistMeasured
+    global robotPose, robotTwistMeasured, transListener
+    robotTwistMeasured = ekfPose.twist
     poseCache = PoseStamped()
     poseCache.pose = ekfPose.pose.pose
     poseCache.header = ekfPose.header
+
+    now = rospy.Time.now()
+    try:
+        transListener.waitForTransform('top_plate', 'metal_detector_support', now, rospy.Duration(2.0))    
+        (trans,rot) = transListener.lookupTransform('top_plate', 'metal_detector_support', now)
+    except:
+        return
+    
+    poseErrorMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
+    poseMat = matrix_from_pose_msg(poseCache.pose)
+    correctedMat = np.dot(poseMat,poseErrorMat)
+    
+    poseCache.pose=pose_msg_from_matrix(correctedMat)
     tmp = poseCache.pose.position.x
     poseCache.pose.position.x = poseCache.pose.position.y+distanceFromCenterX
     poseCache.pose.position.y = -tmp+distanceFromCenterY
-    poseCache.pose.position.x = poseCache.pose.position.x+0.5*np.sin(np.pi*poseCache.pose.orientation.z)
-    poseCache.pose.position.y = poseCache.pose.position.y+0.5*np.cos(np.pi*poseCache.pose.orientation.z)    
+
     robotPose = poseCache
     updateCoilPoseManually(robotPose.pose)
 

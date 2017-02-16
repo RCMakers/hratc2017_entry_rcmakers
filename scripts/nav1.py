@@ -27,6 +27,8 @@ stepPose = PoseWithCovarianceStamped()
 goalPose = PoseWithCovarianceStamped()
 obstaclePose = PoseWithCovarianceStamped()
 
+coils = Coil()
+
 minePose = PoseStamped()
 mines = []
 #laser information
@@ -36,21 +38,23 @@ laserInfoHokuyo = LaserScan()
 arenaWidth = 10
 arenaHeight = 10
 
-minAngle = 0.1
+minAngle = 0.4
 
 pointsToVisit = []
 pointStep = 2
 reachedTargetPoint = True
 
-targetPointDistance = 0.2
+targetPointDistance = 1.0
 minObstacleDistance = 0.3
 minMineDistance = 0.5
 
 minMineAngle = 0.5
 
-pathObstructed
+pathObstructed = False
 
 targetPoint = Pose()
+
+previousTargetDistance = 0.0
 
 
 first = True
@@ -90,12 +94,12 @@ def linear_map(x, in_min, in_max, out_min, out_max):
 
 
 def angleToPoint(pointPose, drivePose):
-	lineAngle = math.atan(pointPose.position.y - drivePose.position.y) / (pointPose.position.x - drivePose.position.x)) 
+	lineAngle = math.atan((pointPose.position.y - drivePose.position.y) / (pointPose.position.x - drivePose.position.x)) 
 	if (pointPose.position.x - drivePose.position.x) < 0:
 		lineAngle =lineAngle - math.pi
 	elif (pointPose.position.x - drivePose.position.x) == 0:
 		return 0
-	radian = lineAngle-(linear_map(drivePose.orientation.z, -1, 1, -1.5*math.pi, math.pi/2)
+	radian = lineAngle-(linear_map(drivePose.orientation.z, -1, 1, -1.5*math.pi, math.pi/2))
 	return linear_map(radian, -1.5*math.pi, 0.5*math.pi, -1, 1)
 ######################### CALLBACKS ############################
 
@@ -114,32 +118,39 @@ def receiveMine(MineNow):
     minePose = MineNow
     mines.append[MineNow]
 
+def receiveCoil(actualCoil):
+    global coils
+    coils = actualCoil
+
+
 def updateRobotPose(ekfPose):
-    global robotPose, robotTwistMeasured, transListener, stepPose
+    global robotPose, robotTwistMeasured, transListener, pointsToVisit
     robotTwistMeasured = ekfPose.twist
     poseCache = PoseWithCovarianceStamped()
     poseCache.pose = ekfPose.pose
     poseCache.header = ekfPose.header
 
-    now = rospy.Time.now()
-    try:
-        transListener.waitForTransform('top_plate', 'metal_detector_support', now, rospy.Duration(2.0))    
-        (trans,rot) = transListener.lookupTransform('top_plate', 'metal_detector_support', now)
-    except:
-        return
+    #now = rospy.Time.now()
+    #try:
+    #    transListener.waitForTransform('top_plate', 'metal_detector_support', now, rospy.Duration(2.0))    
+    #    (trans,rot) = transListener.lookupTransform('top_plate', 'metal_detector_support', now)
+   # except:
+   #     return
     
-    poseErrorMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
-    poseMat = matrix_from_pose_msg(poseCache.pose.pose)
-    correctedMat = np.dot(poseMat,poseErrorMat)
+    #poseErrorMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
+    #poseMat = matrix_from_pose_msg(poseCache.pose.pose)
+    #correctedMat = np.dot(poseMat,poseErrorMat)
     
-    poseCache.pose.pose=pose_msg_from_matrix(correctedMat)
-
+    #poseCache.pose.pose=pose_msg_from_matrix(correctedMat)
     tmp = poseCache.pose.pose.position.x
     poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
     poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
-    
-     
-    robotPose = poseCache 
+
+    robotPose = poseCache
+    rospy.loginfo("robotPose: "+str(robotPose.pose.pose))
+
+    rospy.loginfo("pointsToVisit: "+str(len(pointsToVisit)))
+    rospy.loginfo("targetPoint: "+str(targetPoint.position))
     
     robotTwist = Twist()
     if len(pointsToVisit) == 0:
@@ -147,8 +158,42 @@ def updateRobotPose(ekfPose):
         robotTwist = Twist()
         pubVel.publish(robotTwist)
         rospy.signal_shutdown("all points visited")   
+    rospy.loginfo("distance to target: "+str(get_pose_distance(robotPose.pose.pose, targetPoint)))
+    if get_pose_distance(robotPose.pose.pose, targetPoint) <= targetPointDistance or get_pose_distance(robotPose.pose.pose, targetPoint) > previousTargetDistance:
+        global reachedTargetPoint, previousTargetDistance
+        reachedTargetPoint = True
+        previousTargetDistance = get_pose_distance(robotPose.pose.pose, targetPoint)
+    else:
+        if abs(angleToPoint(targetPoint, robotPose.pose.pose)) <= minAngle:
+            for i in laserInfo.ranges[360:450]:
+                if i <= minObstacleDistance:
+                    global pathObstructed, reachedTargetPoint
+                    pathObstructed = True
+                    reachedTargetPoint = True
+                    robotTwist.linear.x = 0.0
+        if len(mines) > 0:
+            for mine in mines:
+                if get_pose_distance(robotPose.pose.pose, mine.pose) <= minMineDistance:
+                  if abs(angleToPoint(mine.pose, robotPose.pose.pose)) <= minMineAngle:
+                      global pathObstructed, reachedTargetPoint
+                      pathObstructed = True
+                      reachedTargetPoint = True
+                      robotTwist.linear.x = 0.0
+                      
+        if not pathObstructed:
+            rospy.loginfo("angleToPoint: "+str(angleToPoint(targetPoint, robotPose.pose.pose)))
+            if angleToPoint(targetPoint, robotPose.pose.pose) > minAngle:
+                robotTwist.angular.z = -0.5
+                robotTwist.linear.x = 0.0
+            elif angleToPoint(targetPoint, robotPose.pose.pose) < -minAngle:
+                robotTwist.angular.z = 0.5
+                robotTwist.linear.x = 0.0
+            else:
+                robotTwist.linear.x = 0.5 
+                robotTwist.angular.z = 0.0
 
     if reachedTargetPoint:
+        robotTwist.linear.x = 0.0
         global reachedTargetPoint
         reachedTargetPoint = False
         global targetPoint
@@ -160,53 +205,19 @@ def updateRobotPose(ekfPose):
                 targetPoint.position.y = pose.position.y
                 leastDistance = get_pose_distance(robotPose.pose.pose, pose)
         if not pathObstructed:
-            for pose in pointsToVisit:
-                if targetPoint.position.x == pose.position.x and targetPoint.position.y == pose.position.y:
-                    pointsToVisit.remove(pose)
+            for p in range(0, len(pointsToVisit)-1):
+                if targetPoint.position.x == pointsToVisit[p].position.x and targetPoint.position.y == pointsToVisit[p].position.y:
+                    pointsToVisit.pop(p)
+                    break
         if pathObstructed:
             global pathObstructed
             pathObstructed = False
-    elif get_pose_distance(robotPose.pose.pose, targetPoint) <= targetPointDistance:
-        global reachedTargetPoint
-        reachedTargetPoint = True
-    else:
-        if abs(angleToPoint(targetPoint, robotPose.pose.pose)) <= minAngle:
-            for i in laserInfo.ranges[360:450]:
-                if i <= minObstacleDistance:
-                    global pathObstructed, reachedTargetPoint
-                    pathObstructed = True
-                    reachedTargetPoint = True
-        if len(mines) > 0:
-            for mine in mines:
-                if get_pose_distance(robotPose.pose.pose, mine.pose) <= minMineDistance:
-                  if abs(angleToPoint(mine.pose, robotPose.pose.pose)) <= minMineAngle:
-                      global pathObstructed, reachedTargetPoint
-                      pathObstructed = True
-                      reachedTargetPoint = True
-        if not pathObstructed:
-            if angleToPoint(targetPoint, robotPose.pose.pose) > minAngle:
-                robotTwist.angular.z = 0.5
-            else if angleToPoint(targetPoint, robotPose.pose.pose) < -minAngle:
-                robotTwist.angular.z = -0.5
-            else:
-                robotTwist.linear.x = 0.8
-                
+        if robotTwist.linear.x >= 0.5 and (coils.left_coil >= 0.6 or coils.right_coil >= 0.6):
+            robotTwist.linear.x = 0.2
+                 
 
     pubVel = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
     pubVel.publish(robotTwist)
-       
-######################### CURSES STUFF ############################
-
-
-
-
-######################### MAIN ############################
-
-def spin():
-    rospy.spin()
-    
-def StartControl():
-    wrapper(Traverse)
 
 if __name__ == '__main__':
     # Initialize client node
@@ -227,6 +238,7 @@ if __name__ == '__main__':
     # Subscribing to all these topics to bring the robot or simulation to live data
     rospy.Subscriber("/HRATC_FW/set_mine", PoseStamped, receiveMine, queue_size = 10)
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
+    rospy.Subscriber("/coils", Coil, receiveCoil)
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
     rospy.Subscriber("/odometry/filtered", Odometry, updateRobotPose)
 
