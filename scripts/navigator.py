@@ -2,6 +2,8 @@
 # -*- coding:utf8 -*-
 import rospy, os, sys, curses, time, cv2, tf
 import numpy as np
+import math
+from tf.transformations import euler_from_quaternion
 from numpy import deg2rad
 from curses import wrapper
 from threading import Thread
@@ -16,17 +18,18 @@ std = None
 # Robot data
 robotTwist = Twist()
 robotTwistMeasured = Twist()
-distanceFromCenterX = 4.5
-distanceFromCenterY = 5.0
+distanceFromCenterX = 5.0
+distanceFromCenterY = 4.5
+orientationOffset = -0.7
 robotLength = 0.5
-
-pubVel = rospy.Publisher('p3at/cmd_vel', Twist, queue_size=1)
-
+pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
 robotPose = PoseWithCovarianceStamped()
 initialPose = PoseWithCovarianceStamped()
 stepPose = PoseWithCovarianceStamped()
 goalPose = PoseWithCovarianceStamped()
 obstaclePose = PoseWithCovarianceStamped()
+
+coils = Coil()
 
 minePose = PoseStamped()
 mines = []
@@ -34,6 +37,37 @@ mines = []
 laserInfo = LaserScan()
 laserInfoHokuyo = LaserScan()
 
+arenaWidth = 10
+arenaHeight = 10
+
+minAngle = 0.2
+
+pointsToVisit = []
+pointStep = 2
+reachedTargetPoint = False
+
+nearMine = False
+
+targetPointDistance = 1.0
+minObstacleDistance = 0.3
+minMineDistance = 2.0
+
+obstaclePresent = False
+startedTurningAway = False
+angleToObstacle = 0.0
+minObstacleAngle = 0.3
+
+minMineAngle = 0.5
+
+pathObstructed = False
+
+targetPoint = Pose()
+
+previousTargetDistance = 0.0
+
+
+first = True
+reachedEndOfColumn = False
 
 ######################### AUXILIARY FUNCTIONS ############################
 
@@ -60,9 +94,21 @@ def pose_msg_from_matrix(transformation):
 def get_pose_distance(pose1, pose2):
     matrix1 = matrix_from_pose_msg(pose1)
     matrix2 = matrix_from_pose_msg(pose2)
-    rospy.loginfo("matrix1: "+str(matrix1))
-    rospy.loginfo("matrix2: "+str(matrix2))
+    #rospy.loginfo("matrix1: "+str(matrix1))
+    #rospy.loginfo("matrix2: "+str(matrix2))
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
+
+def linear_map(x, in_min, in_max, out_min, out_max):
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+
+
+
+def angleToPoint(pointPose, drivePose):
+
+    (roll, pitch, yaw) = euler_from_quaternion([drivePose.orientation.x, drivePose.orientation.y, drivePose.orientation.z, drivePose.orientation.w])
+    lineAngle = math.atan((pointPose.position.y - drivePose.position.y) / (pointPose.position.x - drivePose.position.x))
+    return lineAngle - yaw
 
 ######################### CALLBACKS ############################
 
@@ -75,265 +121,193 @@ def receiveLaserHokuyo(LaserNow):
     global laserInfoHokuyo 
     laserInfoHokuyo = LaserNow
 
-def recieveMine(MineNow):
-    global minePose
-    global mines
+def receiveMine(MineNow):
+    global minePose, nearMine, mines
+    nearMine = True
     minePose = MineNow
     mines.append[MineNow]
 
+def receiveCoil(actualCoil):
+    global coils
+    coils = actualCoil
+
+
 def updateRobotPose(ekfPose):
-    global robotPose, robotTwistMeasured
+    global robotPose, robotTwistMeasured, transListener, pointsToVisit, robotTwist
     robotTwistMeasured = ekfPose.twist
     poseCache = PoseWithCovarianceStamped()
     poseCache.pose = ekfPose.pose
     poseCache.header = ekfPose.header
+
     tmp = poseCache.pose.pose.position.x
     poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
     poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
+
+    if (poseCache.pose.pose.orientation.z >= np.sin(np.pi/3.0) and poseCache.pose.pose.orientation.w >= -0.5) or (poseCache.pose.pose.orientation.z >= np.sin(np.pi/4.0) and poseCache.pose.pose.orientation.w <= np.cos(np.pi/4.0)):
+        poseCache.pose.pose.orientation.z = -poseCache.pose.pose.orientation.z
+        poseCache.pose.pose.orientation.w = -poseCache.pose.pose.orientation.w
+
     robotPose = poseCache
-
-######################### CURSES STUFF ############################
-
-def checkMine():
-    for mine in mines:
-        if get_pose_distance(mine.pose,robotPose.pose.pose) <= 0.8:
-            return True
-    return False 
-def turnAround():
-    if abs(robotPose.pose.pose.orientation.z) < 0.3:
-        while robotPose.pose.pose.orientation.z > -0.68: #turn left
-            robotTwist.angular.z = -0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-
-        obstaclePose = robotPose
-
-        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 1: #go forward for 1 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.pose.orientation.z < 0.96: #turn right
-            robotTwist.angular.z = -0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-        obstaclePose = robotPose  
-
-        stepPose = robotPose
-        stepPose.pose.pose.position.x += 10
-        return stepPose
-
-    elif abs(robotPose.pose.pose.orientation.z) < 0.7:
-        while robotPose.pose.pose.orientation.z < -0.68 or robotPose.pose.pose.orientation.z > 0: #turn left
-            robotTwist.angular.z = 0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-
-        obstaclePose = robotPose
-
-        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 1: #go forward for 1 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.pose.orientation.z < -0.02: #turn left
-            robotTwist.angular.z = 0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-        stepPose = robotPose
-        stepPose.pose.pose.position.x -= 10
-        return stepPose
-
-def avoidObstacle():
-    if abs(robotPose.pose.pose.orientation.z) < 0.3: #if going down
-        while robotPose.pose.pose.orientation.z > -0.68: #turn right
-            robotTwist.angular.z = -0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-        obstaclePose = robotPose
-
-        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 1: #go forward for 1 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.pose.orientation.z < -0.01: #turn left
-            robotTwist.angular.z = 0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-        obstaclePose = robotPose  
-
-        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 2: #go forward for 2 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.pose.orientation.z < 0.68: #turn left
-            robotTwist.angular.z = 0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-        obstaclePose = robotPose 
-
-
-        while get_pose_distance(obstaclePose.pose.pose, robotPose.pose.pose) < 1: #go forward for 1 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.pose.orientation.z > 0.01: #turn right
-            robotTwist.angular.z = -0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-
-    elif abs(robotPose.pose.pose.orientation.z) > 0.7:
-        while robotPose.pose.pose.orientation.z < -0.68 or robotPose.pose.orientation.z > 0: #turn left
-            robotTwist.angular.z = 0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-        obstaclePose = robotPose
-
-        while get_pose_distance(obstaclePose, robotPose) < 1: #go forward for 1 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.pose.orientation.z < 0.96: #turn right
-            robotTwist.angular.z = -0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-        obstaclePose = robotPose  
-
-        while get_pose_distance(obstaclePose, robotPose) < 2: #go forward for 2 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.pose.orientation.z > 0.68 or robotPose.pose.orientation.z < 0: #turn right
-            robotTwist.angular.z = -0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-        obstaclePose = robotPose 
-
-        while get_pose_distance(obstaclePose, robotPose) < 1: #go forward for 1 unit
-            robotTwist.linear.x = 0.2
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.linear.x = 0.0 
-        pubVel.publish(robotTwist)
-
-        while robotPose.pose.pose.orientation.z > 0.96: #turn left
-            robotTwist.angular.z = 0.3
-            pubVel.publish(robotTwist)
-            #time.sleep(0.1)
-        robotTwist.angular.z = 0.0 
-        pubVel.publish(robotTwist)
-
-
-# Basic control
-def Traverse(stdscr):
-    stdscr.keypad(True)
-    stdscr.nodelay(True)
-    logstr = "" 
-    k = None
-    direction = -1
-    initialPose = robotPose
-    stepPose = robotPose
-    stepPose.pose.pose.position.x -= 10
-    global std
-    std = stdscr
-    #publishing topics
-    pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
-    global mine_detected
-    mine_detected = False
-    # While 'Esc' is not pressed
-    while k != chr(27):
-        
-        if get_pose_distance(goalPose.pose.pose, initialPose.pose.pose) <= 0.3:
-            stepPose = turnAround()
-        elif checkMine() <= 0.8:
-            avoidObstacle()
-        else:
-            robotTwist.linear.x = 0.3
-            pubVel.publish(robotTwist)
-
-            # Check no key
-        try:
-            k = stdscr.getkey()
-        except:
-            k = None
-
-            #time.sleep(0.1)
-
-    stdscr.keypad(False)
-    rospy.signal_shutdown("Shutdown Competitor")
-
-######################### MAIN ############################
-
-def spin():
-    rospy.spin()
+    rospy.loginfo("robotPose: "+str(robotPose.pose.pose))
     
-def StartControl():
-    wrapper(Traverse)
+
+    rospy.loginfo("pointsToVisit: "+str(len(pointsToVisit)))
+    rospy.loginfo("targetPoint: "+str(targetPoint.position))
+    
+    robotTwist = Twist()
+
+    if len(mines) > 0:
+        for mine in mines:
+            if get_pose_distance(robotPose.pose.pose, mine.pose) <= minMineDistance:
+                if abs(angleToPoint(mine.pose, robotPose.pose.pose)) <= minMineAngle:
+                    global pathObstructed, reachedTargetPoint, nearMine
+                    nearMine = True
+                    robotTwist.linear.x = 0.0  
+
+    if len(pointsToVisit) == 0:
+        pubVel = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
+        robotTwist = Twist()
+        pubVel.publish(robotTwist)
+        rospy.signal_shutdown("all points visited")
+
+    if nearMine and len(mines) > 0:
+        leastMineDistance = 100.0
+        closestMine = PoseStamped()
+        for mine in mines:
+            if get_pose_distance(mine.pose, robotPose.pose.pose) < leastMineDistance:
+                closestMine.pose.position.x = mine.pose.position.x
+                closestMine.pose.position.y = mine.pose.position.y
+                leastMineDistance = get_pose_disance(mine.pose, robotPose.pose.pose)
+        if abs(angleToPoint(closestMine.pose, robotPose.pose.pose)) <= minMineAngle or get_pose_distance(closestMine.pose, robotPose.pose.pose) <= minMineDistance:
+            robotTwist.linear.x = -0.5
+            robotTwist.angular.z = -0.5
+        else:
+            global nearMine, reachedTargetPoint, pathObstructed
+            nearMine = False
+            reachedTargetPoint = True
+            pathObstructed = True
+            
+
+    #rospy.loginfo("distance to target: "+str(get_pose_distance(robotPose.pose.pose, targetPoint)))
+    if get_pose_distance(robotPose.pose.pose, targetPoint) <= targetPointDistance:
+        global reachedTargetPoint
+        reachedTargetPoint = True
+    else:
+        if abs(angleToPoint(targetPoint, robotPose.pose.pose)) <= minAngle:
+            for i in laserInfo.ranges[270:540]:
+                if i <= minObstacleDistance:
+                    global pathObstructed, reachedTargetPoint, obstaclePresent, startedTurningAway
+                    pathObstructed = True
+                    reachedTargetPoint = True
+                    obstaclePresent = True
+                    startedTurningAway = True
+                    robotTwist.linear.x = 0.0
+        if len(mines) > 0:
+            for mine in mines:
+                if get_pose_distance(robotPose.pose.pose, mine.pose) <= minMineDistance:
+                  if abs(angleToPoint(mine.pose, robotPose.pose.pose)) <= minMineAngle:
+                      global pathObstructed, reachedTargetPoint
+                      pathObstructed = True
+                      reachedTargetPoint = True
+                      robotTwist.linear.x = 0.0
+                      
+        rospy.loginfo("angleToPoint: "+str(angleToPoint(targetPoint, robotPose.pose.pose)))
+        if angleToPoint(targetPoint, robotPose.pose.pose) > minAngle:
+            robotTwist.angular.z = -0.5
+            robotTwist.linear.x = 0.0
+        elif angleToPoint(targetPoint, robotPose.pose.pose) < -minAngle:
+            robotTwist.angular.z = 0.5
+            robotTwist.linear.x = 0.0
+        if not pathObstructed:
+            if abs(angleToPoint(targetPoint, robotPose.pose.pose)) <= minAngle:
+                robotTwist.linear.x = 0.5 
+                robotTwist.angular.z = 0.0
+
+    if reachedTargetPoint:
+        robotTwist.linear.x = 0.0
+        global reachedTargetPoint
+        global targetPoint
+        targetPoint = Pose()
+        leastDistance = 100.0
+        leastAngle = 5.0
+        for pose in pointsToVisit:
+            if get_pose_distance(robotPose.pose.pose, pose) < leastDistance and targetPoint.position.x != pose.position.x and targetPoint.position.y != pose.position.y:
+                targetPoint.position.x = pose.position.x
+                targetPoint.position.y = pose.position.y
+                leastDistance = get_pose_distance(robotPose.pose.pose, targetPoint)
+        if not pathObstructed:
+            for p in range(0, len(pointsToVisit)-1):
+                if targetPoint.position.x == pointsToVisit[p].position.x and targetPoint.position.y == pointsToVisit[p].position.y:
+                    pointsToVisit.pop(p)
+                    reachedTargetPoint = False
+                    break
+        if pathObstructed:
+            if obstaclePresent:
+                if startedTurningAway:
+                    global startedTurningAway, angleToObstacle
+                    startedTurningAway = False
+                    angleToObstacle = robotPose.pose.pose.orientation.z
+                    robotTwist.linear.x = 0.0
+                    robotTwist.angular.z = 0.5
+                else:
+                    if abs(robotPose.pose.pose.orientation.z - angleToObstacle) < minObstacleAngle:
+                        rospy.loginfo("angletoobstacle: "+str(abs(robotPose.pose.pose.orientation.z - angleToObstacle)))
+                        robotTwist.linear.x = 0.0
+                        robotTwist.angular.z = 0.5
+                    else:
+                        robotTwist.linear.x = 0.0
+                        robotTwist.angular.z = 0.0
+                        global obstaclePresent
+                        obstaclePresent = False
+            else:
+                leastDistance = 100.0
+                leastAngle = 5.0
+                targetPoint = Pose()
+                robotTwist.linear.x = 0.0
+                robotTwist.angular.z = 0.0
+                for pose in pointsToVisit:
+                    if get_pose_distance(robotPose.pose.pose, pose) < leastDistance and abs(angleToPoint(pose, robotPose.pose.pose)) < leastAngle:
+                        targetPoint.position.x = pose.position.x
+                        targetPoint.position.y = pose.position.y
+                        leastDistance = get_pose_distance(robotPose.pose.pose, pose)
+                        leastAngle = abs(angleToPoint(pose, robotPose.pose.pose))
+                global pathObstructed, reachedTargetPoint
+                pathObstructed = False
+                reachedTargetPoint = False
+            
+    if robotTwist.linear.x >= 0.5 and (coils.left_coil >= 0.6 or coils.right_coil >= 0.6):
+        robotTwist.linear.x = 0.2
+                 
+    pubVel = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
+    pubVel.publish(robotTwist)
 
 if __name__ == '__main__':
     # Initialize client node
     rospy.init_node('navigator')
     
     transListener = tf.TransformListener()
+    count = 0
+    while count <= arenaHeight:
+        count2 = 0
+        while count2 <= arenaWidth:
+            visitPoint = Pose()
+            visitPoint.position.x = float(arenaWidth/2-count2)
+            visitPoint.position.y = float(arenaHeight/2-count)
+            pointsToVisit.append(visitPoint)
+            count2 = count2+pointStep
+        count = count+pointStep
+
+    global targetPoint
+    targetPoint.position.x = pointsToVisit[0].position.x
+    targetPoint.position.y = pointsToVisit[0].position.y
 
     # Subscribing to all these topics to bring the robot or simulation to live data
-    rospy.Subscriber("/HRATC_FW/set_mine", PoseStamped, recieveMine, queue_size = 10)
+    rospy.Subscriber("/HRATC_FW/set_mine", PoseStamped, receiveMine, queue_size = 1)
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
+    rospy.Subscriber("/coils", Coil, receiveCoil)
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
     rospy.Subscriber("/odometry/filtered", Odometry, updateRobotPose)
 
     #Starting curses and ROS
-    Thread(target = StartControl).start()
-    Thread(target = spin).start()
-
-
+    #Thread(target = StartControl).start()
+    rospy.spin()

@@ -99,7 +99,7 @@ def updateRobotPose(ekfPose):
     if (poseCache.pose.pose.orientation.z >= np.sin(np.pi/3.0) and poseCache.pose.pose.orientation.w >= -0.5) or (poseCache.pose.pose.orientation.z >= np.sin(np.pi/4.0) and poseCache.pose.pose.orientation.w <= np.cos(np.pi/4.0)):
         poseCache.pose.pose.orientation.z = -poseCache.pose.pose.orientation.z
         poseCache.pose.pose.orientation.w = -poseCache.pose.pose.orientation.w
-    rospy.loginfo(str(robotPose.pose.pose.orientation))
+    #rospy.loginfo(str(robotPose.pose.pose.orientation))
     robotPose = poseCache
         
 

@@ -41,6 +41,8 @@ Following this, first uninstall any current instances of `python-sklearn` you ma
 ### Finalization
 In the root directory of your workspace, run the following:  
 `$ catkin_make`.  
+`$ chmod +x src/hratc2017_entry_rcmakers/scripts/navigator.py`
+`$ chmod +x src/hratc2017_entry_rcmakers/scripts/detector.py`
 
 ## Usage
 With the navigation stack, sensors, and simulation (if applicable) running, run the following command:  
