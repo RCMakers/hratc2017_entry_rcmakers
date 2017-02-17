@@ -3,6 +3,7 @@
 import rospy, os, sys, curses, time, cv2, tf
 import numpy as np
 import math
+from tf.transformations import euler_from_quaternion
 from numpy import deg2rad
 from curses import wrapper
 from threading import Thread
@@ -19,6 +20,7 @@ robotTwist = Twist()
 robotTwistMeasured = Twist()
 distanceFromCenterX = 5.0
 distanceFromCenterY = 4.5
+orientationOffset = -0.7
 robotLength = 0.5
 pubVel   = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
 robotPose = PoseWithCovarianceStamped()
@@ -53,7 +55,7 @@ minMineDistance = 2.0
 obstaclePresent = False
 startedTurningAway = False
 angleToObstacle = 0.0
-minObstacleAngle = 0.5
+minObstacleAngle = 0.3
 
 minMineAngle = 0.5
 
@@ -97,17 +99,17 @@ def get_pose_distance(pose1, pose2):
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
 
 def linear_map(x, in_min, in_max, out_min, out_max):
-    	return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
+
+
 
 
 def angleToPoint(pointPose, drivePose):
-	lineAngle = math.atan((pointPose.position.y - drivePose.position.y) / (pointPose.position.x - drivePose.position.x)) 
-	if (pointPose.position.x - drivePose.position.x) < 0:
-		lineAngle =lineAngle - math.pi
-	elif (pointPose.position.x - drivePose.position.x) == 0:
-		return 0
-	radian = lineAngle-(linear_map(drivePose.orientation.z, -1, 1, -1.5*math.pi, math.pi/2))
-	return linear_map(radian, -1.5*math.pi, 0.5*math.pi, -1, 1)
+
+    yaw = euler_from_quaternion(drivePose.orientation).
+    lineAngle = math.atan((pointPose.position.y - drivePose.position.y) / (pointPose.position.x - drivePose.position.x))
+    return lineAngle - yaw
+
 ######################### CALLBACKS ############################
 
 # Laser range-finder callback
@@ -137,24 +139,16 @@ def updateRobotPose(ekfPose):
     poseCache.pose = ekfPose.pose
     poseCache.header = ekfPose.header
 
-    #now = rospy.Time.now()
-    #try:
-    #    transListener.waitForTransform('top_plate', 'metal_detector_support', now, rospy.Duration(2.0))    
-    #    (trans,rot) = transListener.lookupTransform('top_plate', 'metal_detector_support', now)
-   # except:
-   #     return
-    
-    #poseErrorMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
-    #poseMat = matrix_from_pose_msg(poseCache.pose.pose)
-    #correctedMat = np.dot(poseMat,poseErrorMat)
-    
-    #poseCache.pose.pose=pose_msg_from_matrix(correctedMat)
     tmp = poseCache.pose.pose.position.x
     poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
     poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
 
+    if (poseCache.pose.pose.orientation.z >= np.sin(np.pi/3.0) and poseCache.pose.pose.orientation.w >= -0.5) or (poseCache.pose.pose.orientation.z >= np.sin(np.pi/4.0) and poseCache.pose.pose.orientation.w <= np.cos(np.pi/4.0)):
+        poseCache.pose.pose.orientation.z = -poseCache.pose.pose.orientation.z
+        poseCache.pose.pose.orientation.w = -poseCache.pose.pose.orientation.w
+
     robotPose = poseCache
-    #rospy.loginfo("robotPose: "+str(robotPose.pose.pose))
+    rospy.loginfo("robotPose: "+str(robotPose.pose.pose))
     
 
     rospy.loginfo("pointsToVisit: "+str(len(pointsToVisit)))
@@ -256,7 +250,8 @@ def updateRobotPose(ekfPose):
                     robotTwist.linear.x = 0.0
                     robotTwist.angular.z = 0.5
                 else:
-                    if (robotPose.pose.pose.orientation.z - angleToObstacle) < minObstacleAngle:
+                    if abs(robotPose.pose.pose.orientation.z - angleToObstacle) < minObstacleAngle:
+                        rospy.loginfo("angletoobstacle: "+str(abs(robotPose.pose.pose.orientation.z - angleToObstacle)))
                         robotTwist.linear.x = 0.0
                         robotTwist.angular.z = 0.5
                     else:
@@ -283,7 +278,6 @@ def updateRobotPose(ekfPose):
     if robotTwist.linear.x >= 0.5 and (coils.left_coil >= 0.6 or coils.right_coil >= 0.6):
         robotTwist.linear.x = 0.2
                  
-
     pubVel = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
     pubVel.publish(robotTwist)
 

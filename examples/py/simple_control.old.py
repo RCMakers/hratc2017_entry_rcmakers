@@ -10,19 +10,23 @@ from sensor_msgs.msg import LaserScan, Imu
 from metal_detector_msgs.msg._Coil import Coil
 from tf import transformations
 from nav_msgs.msg import Odometry
+from visualization_msgs.msg import Marker
 
 # read/write stuff on screen
 std = None
 
 offsetWritten = False
 
-distanceFromCenterX = 4.5
-distanceFromCenterY = 5.0
+distanceFromCenterX = 5.0
+distanceFromCenterY = 4.5
+orientationOffset = -0.7
 
 radStep = deg2rad(15)
 linStep = 0.1
 transformer = None
 transListener = None
+
+trueRobotPose = Marker()
 
 # Robot data
 robotTwist = Twist()
@@ -70,24 +74,31 @@ def updateRobotPose(ekfPose):
     poseCache.pose = ekfPose.pose.pose
     poseCache.header = ekfPose.header
 
-    now = rospy.Time.now()
-    try:
-        transListener.waitForTransform('top_plate', 'metal_detector_support', now, rospy.Duration(2.0))    
-        (trans,rot) = transListener.lookupTransform('top_plate', 'metal_detector_support', now)
-    except:
-        return
     
-    poseErrorMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
-    poseMat = matrix_from_pose_msg(poseCache.pose)
-    correctedMat = np.dot(poseMat,poseErrorMat)
+    #now = rospy.Time.now()
+    #try:
+    #    transListener.waitForTransform('top_plate', 'metal_detector_support', now, rospy.Duration(2.0))    
+    #    (trans,rot) = transListener.lookupTransform('top_plate', 'metal_detector_support', now)
+    #except:
+    #    return
     
-    poseCache.pose=pose_msg_from_matrix(correctedMat)
+    #poseErrorMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
+    #poseMat = matrix_from_pose_msg(poseCache.pose)
+    #correctedMat = np.dot(poseMat,poseErrorMat)
+    
+    #poseCache.pose=pose_msg_from_matrix(correctedMat)
+    updateCoilPoseManually(poseCache.pose)
+
     tmp = poseCache.pose.position.x
     poseCache.pose.position.x = poseCache.pose.position.y+distanceFromCenterX
     poseCache.pose.position.y = -tmp+distanceFromCenterY
+    if (poseCache.pose.orientation.z >= np.sin(np.pi/3.0) and poseCache.pose.orientation.w >= -0.5) or (poseCache.pose.orientation.z >= np.sin(np.pi/4.0) and poseCache.pose.orientation.w <= np.cos(np.pi/4.0)):
+        poseCache.pose.orientation.z = -poseCache.pose.orientation.z
+        poseCache.pose.orientation.w = -poseCache.pose.orientation.w
 
     robotPose = poseCache
-    updateCoilPoseManually(robotPose.pose)
+    #posePub  = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped)
+    #posePub.publish(robotPose)
 
 def _updateRobotPose(ekfPose):
     global robotPose
@@ -102,7 +113,6 @@ def _updateRobotPose(ekfPose):
         return
     tr2 = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
     robotPose.pose = pose_msg_from_matrix(tr2)
-    navfile.write(str(robotPose.pose.position.x)+","+str(robotPose.pose.position.y)+","+str(ekfPose.pose.pose.position.x)+","+str(ekfPose.pose.pose.position.y)+"\n")
 
 def updateCoilPoseFromTF():
     global transListener, leftCoilPose
@@ -122,6 +132,10 @@ def updateCoilPoseFromTF():
 
 def updateCoilPoseManually(referencePose):
     global transListener, leftCoilPose
+
+    if (referencePose.orientation.z >= np.sin(np.pi/3.0) and referencePose.orientation.w >= -0.5) or (referencePose.orientation.z >= np.sin(np.pi/4.0) and referencePose.orientation.w <= np.cos(np.pi/4.0)):
+       referencePose.orientation.z = -referencePose.orientation.z
+       referencePose.orientation.w = -referencePose.orientation.w
 
     now = rospy.Time.now()
     # Get left coil pose in relation to robot
@@ -151,7 +165,6 @@ def sendMine():
 #    updateCoilPoseFromTF()
 
     ## It is better to compute the coil pose in relation to a corrected robot pose
-    updateCoilPoseManually(robotPose.pose)
 
     pubMine  = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped)
     pubMine.publish(leftCoilPose)
@@ -178,6 +191,10 @@ def receiveCoilSignal(actualCoil):
     coils = actualCoil
 
 ######################### CURSES STUFF ############################
+def updateTrueRobotPose(truePose):
+    global trueRobotPose
+    trueRobotPose = truePose
+
 
 # Printing data on screen
 def showStats():
@@ -202,7 +219,8 @@ def showStats():
         std.addstr(20, 0 , "Laser Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfo.ranges), min(laserInfo.ranges), max(laserInfo.ranges)))
     if laserInfoHokuyo.ranges != []:
         std.addstr(21, 0 , "Laser Hokuyo Readings {} Range Min {:0.4f} Range Max {:0.4f}".format( len(laserInfoHokuyo.ranges), min(laserInfoHokuyo.ranges), max(laserInfoHokuyo.ranges)))
-    std.addstr(22,0, "Orientation x: {} y: {} z: {}".format(robotPose.pose.orientation.x, robotPose.pose.orientation.y, robotPose.pose.orientation.z))
+    std.addstr(22,0, "Orientation z: {} w: {}".format(robotPose.pose.orientation.z, robotPose.pose.orientation.w))
+    std.addstr(23, 0, "Orientation (true) z: {} w: {}".format(trueRobotPose.pose.orientation.z, trueRobotPose.pose.orientation.w))
     std.refresh()
 
 # Basic control
@@ -275,6 +293,7 @@ if __name__ == '__main__':
     rospy.Subscriber("/scan", LaserScan, receiveLaser)
     rospy.Subscriber("/scan_hokuyo", LaserScan, receiveLaserHokuyo)
     rospy.Subscriber("/odometry/filtered", Odometry, updateRobotPose)
+    rospy.Subscriber("/judge/true_robot_marker", Marker, updateTrueRobotPose)
     #Starting curses and ROS
     Thread(target = StartControl).start()
     Thread(target = spin).start()

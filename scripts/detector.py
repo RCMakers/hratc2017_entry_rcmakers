@@ -48,6 +48,7 @@ bufferFull = False
 
 distanceFromCenterX = 5.0
 distanceFromCenterY = 4.5
+orientationOffset = -0.7
 robotLength = 0.5
 
 ######################### AUXILIARY FUNCTIONS ############################
@@ -90,29 +91,25 @@ def updateRobotPose(ekfPose):
     poseCache.pose = ekfPose.pose
     poseCache.header = ekfPose.header
 
-    now = rospy.Time.now()
-    try:
-        transListener.waitForTransform('top_plate', 'metal_detector_support', now, rospy.Duration(2.0))    
-        (trans,rot) = transListener.lookupTransform('top_plate', 'metal_detector_support', now)
-    except:
-        return
-    
-    poseErrorMat = transformations.concatenate_matrices(transformations.translation_matrix(trans), transformations.quaternion_matrix(rot))
-    poseMat = matrix_from_pose_msg(poseCache.pose.pose)
-    correctedMat = np.dot(poseMat,poseErrorMat)
-    
-    poseCache.pose.pose=pose_msg_from_matrix(correctedMat)
     updateCoilPoseManually(poseCache.pose.pose)
 
     tmp = poseCache.pose.pose.position.x
     poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
     poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
-
+    if (poseCache.pose.pose.orientation.z >= np.sin(np.pi/3.0) and poseCache.pose.pose.orientation.w >= -0.5) or (poseCache.pose.pose.orientation.z >= np.sin(np.pi/4.0) and poseCache.pose.pose.orientation.w <= np.cos(np.pi/4.0)):
+        poseCache.pose.pose.orientation.z = -poseCache.pose.pose.orientation.z
+        poseCache.pose.pose.orientation.w = -poseCache.pose.pose.orientation.w
+    rospy.loginfo(str(robotPose.pose.pose.orientation))
     robotPose = poseCache
         
 
 def updateCoilPoseManually(referencePose):
     global transListener, leftCoilPose, rightCoilPose
+
+    refPoseCache = referencePose
+    if (refPoseCache.orientation.z >= np.sin(np.pi/3.0) and refPoseCache.orientation.w >= -0.5) or (refPoseCache.orientation.z >= np.sin(np.pi/4.0) and refPoseCache.orientation.w <= np.cos(np.pi/4.0)):
+       refPoseCache.orientation.z = -refPoseCache.orientation.z
+       refPoseCache.orientation.w = -refPoseCache.orientation.w
 
     now = rospy.Time.now()
     # Get left and right coil pose in relation to robot
@@ -129,7 +126,7 @@ def updateCoilPoseManually(referencePose):
     localCoil_Mat_R = transformations.concatenate_matrices(transformations.translation_matrix(transR), transformations.quaternion_matrix(rotR))
 
     # Use reference robot pose
-    robot_Mat = matrix_from_pose_msg(referencePose)
+    robot_Mat = matrix_from_pose_msg(refPoseCache)
 
     # Compute corrected coil pose
     corrected_Mat_L = np.dot(robot_Mat, localCoil_Mat_L)
