@@ -22,9 +22,6 @@ This package is team RCMakers's submission for the HRATC 2017.
 `angles`  
 `laser_assembler`  
 `control_msgs`  
-`gmapping`  
-`openslam_gmapping`  
-`map_server`  
 `robot_localization`  
 
 ## Installation
