@@ -31,6 +31,15 @@
   <build_depend>map_server</build_depend>
   <build_depend>robot_localization</build_depend>
   <build_depend>nav_msgs</build_depend>
+  <build_depend>global_planner</build_depend>
+  <build_depend>base_local_planner</build_depend>
+  <build_depend>nav_core</build_depend>
+  <build_depend>costmap_2d</build_depend>
+  <build_depend>rotate_recovery</build_depend>
+  <build_depend>clear_costmap_recovery</build_depend>
+  <build_depend>amcl</build_depend>
+  <build_depend>move_base</build_depend>
+
 
   <run_depend>metal_detector_msgs</run_depend>
   <run_depend>roscpp</run_depend>
@@ -49,6 +58,14 @@
   <run_depend>map_server</run_depend>
   <run_depend>robot_localization</run_depend>
   <run_depend>nav_msgs</run_depend>
+  <run_depend>global_planner</run_depend>
+  <run_depend>base_local_planner</run_depend>
+  <run_depend>nav_core</run_depend>
+  <run_depend>costmap_2d</run_depend>
+  <run_depend>rotate_recovery</run_depend>
+  <run_depend>clear_costmap_recovery</run_depend>
+  <run_depend>amcl</run_depend>
+  <run_depend>move_base</run_depend>
   <run_depend>python-numpy</run_depend>
 
 <!--  <run_depend>hratc2017_framework</run_depend>

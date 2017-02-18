@@ -19,8 +19,17 @@ find_package(catkin REQUIRED COMPONENTS
   laser_assembler
   control_msgs
   openslam_gmapping
+  gmapping
   map_server
   nav_msgs
+  global_planner
+  base_local_planner
+  costmap_2d
+  rotate_recovery
+  clear_costmap_recovery
+  amcl
+  move_base
+  nav_core
 #  hratc2017_framework
 #  hratc2017_robot
 )

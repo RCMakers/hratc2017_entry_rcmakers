@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # -*- coding:utf8 -*-
 import rospy, os, sys, curses, time, cv2, tf
 import numpy as np
@@ -40,7 +40,7 @@ laserInfoHokuyo = LaserScan()
 arenaWidth = 10
 arenaHeight = 10
 
-minAngle = 0.2
+minAngle = 0.1
 
 pointsToVisit = []
 pointStep = 2
@@ -64,6 +64,8 @@ pathObstructed = False
 targetPoint = Pose()
 
 previousTargetDistance = 0.0
+
+unmanageable = False
 
 
 first = True
@@ -98,15 +100,12 @@ def get_pose_distance(pose1, pose2):
     #rospy.loginfo("matrix2: "+str(matrix2))
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
 
-def linear_map(x, in_min, in_max, out_min, out_max):
-    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
-
-
-
 
 def angleToPoint(pointPose, drivePose):
 
-    (roll, pitch, yaw) = euler_from_quaternion([drivePose.orientation.x, drivePose.orientation.y, drivePose.orientation.z, drivePose.orientation.w])
+    #(roll, pitch, yaw) = euler_from_quaternion([drivePose.orientation.x, drivePose.orientation.y, drivePose.orientation.z, drivePose.orientation.w])
+
+    yaw = 2 * math.atan(drivePose.orientation.z / drivePose.orientation.w)
     lineAngle = math.atan((pointPose.position.y - drivePose.position.y) / (pointPose.position.x - drivePose.position.x))
     return lineAngle - yaw
 
@@ -169,6 +168,20 @@ def updateRobotPose(ekfPose):
         robotTwist = Twist()
         pubVel.publish(robotTwist)
         rospy.signal_shutdown("all points visited")
+        return
+
+    if unmanageable:
+        if abs(angleToPoint(targetPoint, robotPose.pose.pose)) > minAngle:
+            robotTwist.linear.x = 0.0
+            robotTwist.angular.z = -1.0
+            pubVel = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size =1)
+            pubVel.publish(robotTwist)
+            return
+        else:
+            global unmanageable
+            unmanageable = False
+ 
+
 
     if nearMine and len(mines) > 0:
         leastMineDistance = 100.0
@@ -187,14 +200,13 @@ def updateRobotPose(ekfPose):
             reachedTargetPoint = True
             pathObstructed = True
             
-
-    #rospy.loginfo("distance to target: "+str(get_pose_distance(robotPose.pose.pose, targetPoint)))
+    rospy.loginfo("distance to target: "+str(get_pose_distance(robotPose.pose.pose, targetPoint)))
     if get_pose_distance(robotPose.pose.pose, targetPoint) <= targetPointDistance:
         global reachedTargetPoint
         reachedTargetPoint = True
     else:
-        if abs(angleToPoint(targetPoint, robotPose.pose.pose)) <= minAngle:
-            for i in laserInfo.ranges[270:540]:
+        if True: #abs(angleToPoint(targetPoint, robotPose.pose.pose)) <= minAngle:
+            for i in laserInfo.ranges[360:450]:
                 if i <= minObstacleDistance:
                     global pathObstructed, reachedTargetPoint, obstaclePresent, startedTurningAway
                     pathObstructed = True
@@ -212,11 +224,17 @@ def updateRobotPose(ekfPose):
                       robotTwist.linear.x = 0.0
                       
         rospy.loginfo("angleToPoint: "+str(angleToPoint(targetPoint, robotPose.pose.pose)))
-        if angleToPoint(targetPoint, robotPose.pose.pose) > minAngle:
-            robotTwist.angular.z = -0.5
+
+       if abs(angleToPoint(targetPoint, robotPose.pose.pose)) > 1.3:
+            global unmanageable
+            unmanageable = True
+            return
+     
+       if abs(angleToPoint(targetPoint, robotPose.pose.pose) > minAngle):
+            robotTwist.angular.z = 0.5
             robotTwist.linear.x = 0.0
         elif angleToPoint(targetPoint, robotPose.pose.pose) < -minAngle:
-            robotTwist.angular.z = 0.5
+            robotTwist.angular.z = -0.5
             robotTwist.linear.x = 0.0
         if not pathObstructed:
             if abs(angleToPoint(targetPoint, robotPose.pose.pose)) <= minAngle:
@@ -246,11 +264,12 @@ def updateRobotPose(ekfPose):
                 if startedTurningAway:
                     global startedTurningAway, angleToObstacle
                     startedTurningAway = False
-                    angleToObstacle = robotPose.pose.pose.orientation.z
+                    angleToObstacle = 2 * math.atan(robotPose.pose.pose.orientation.z / robotPose.pose.pose.orientation.w)
                     robotTwist.linear.x = 0.0
                     robotTwist.angular.z = 0.5
                 else:
-                    if abs(robotPose.pose.pose.orientation.z - angleToObstacle) < minObstacleAngle:
+                    robotYaw = 2 * math.atan(robotPose.pose.pose.orientation.z / robotPose.pose.pose.orientation.w)
+                    if abs(robotYaw - angleToObstacle) < minObstacleAngle:
                         rospy.loginfo("angletoobstacle: "+str(abs(robotPose.pose.pose.orientation.z - angleToObstacle)))
                         robotTwist.linear.x = 0.0
                         robotTwist.angular.z = 0.5
@@ -275,8 +294,9 @@ def updateRobotPose(ekfPose):
                 pathObstructed = False
                 reachedTargetPoint = False
             
-    if robotTwist.linear.x >= 0.5 and (coils.left_coil >= 0.6 or coils.right_coil >= 0.6):
-        robotTwist.linear.x = 0.2
+    if robotTwist.linear.x >= 0.5 and (coils.left_coil >= 0.7 or coils.right_coil >= 0.7):
+        global nearMine
+        nearMine = True
                  
     pubVel = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
     pubVel.publish(robotTwist)
