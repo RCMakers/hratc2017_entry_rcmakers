@@ -2,7 +2,7 @@ This package is team RCMakers's submission for the HRATC 2017.
 
 ## Dependencies
 ### Utilities
-`pip`
+`pip`  
 `python-rosdep`
 
 ### Python Libraries
@@ -11,7 +11,7 @@ This package is team RCMakers's submission for the HRATC 2017.
 
 ### ROS Packages
 `metal_detector_msgs`  
-`roscpp` 
+`roscpp`  
 `nav_msgs`   
 `rospy`  
 `tf`  
@@ -38,7 +38,7 @@ Following this, first uninstall any current instances of `python-sklearn` you ma
 ### Finalization
 In the root directory of your workspace, run the following:  
 `$ catkin_make`.  
-`$ chmod +x src/hratc2017_entry_rcmakers/scripts/navigator.py`
+`$ chmod +x src/hratc2017_entry_rcmakers/scripts/navigator.py`  
 `$ chmod +x src/hratc2017_entry_rcmakers/scripts/detector.py`
 
 ## Usage
