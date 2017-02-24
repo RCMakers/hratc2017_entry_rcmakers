@@ -1,32 +1,51 @@
-The hratc2017_entry_template package will help the HRATC 2017 competitors jump start their entry!
-To know more about HRATC 2017 visit http://inf.ufrgs.br/hratc2017/HRATC2017/Welcome.html
+This package is team RCMakers's submission for the HRATC 2017.
 
-### Installation
-To learn how to install the complete HRATC 2017 framework visit http://inf.ufrgs.br/hratc2017/HRATC2017/Simulator.html
+## Dependencies
+### Utilities
+`pip`  
+`python-rosdep`
 
-### Examples in the repository
-The examples present on the hratc2017_entry_template package are available under the examples folder. 
-These are divided into two sub-folders, cpp and py.
+### Python Libraries
+`python-numpy`  
+`scikit-learn (v0.18.x)` (not available on APT)  
 
-The cpp examples are:
-* **get_data** - In this example we show how to read odometry, gps, metal detection information, among other stuff.
-* **random_walk_simple_node** - In this example a random walk algorithm is implemented. The goal is to demonstrate how to subscribe to the odometry and laser data and publish velocity commands to the robot.
-* **set_mine_node** - In this example we show how to tell the HRATC 2017 Judge that we found a mine.
+### ROS Packages
+`metal_detector_msgs`  
+`roscpp`  
+`nav_msgs`   
+`rospy`  
+`tf`  
+`std_msgs`  
+`message_filters`  
+`move_base_msgs`  
+`actionlib`  
+`angles`  
+`laser_assembler`  
+`control_msgs`  
+`robot_localization`  
 
-The py example is:
-* **simple_control** - This example is designed to guide you through the system capabilities. Thus it was made as plain as possible. This is not meant to be a complete and exhaustive tutorial. We just illustrate some of the basic features of the system using a sample code in python. There are snippets of code for most of the system capabilities in this package.
+## Installation
+First, copy the package folder (rename it to `hratc2017_entry_rcmakers` if its name is different) to the `src` folder in the `hratc2017_workspace`.  
 
-### How to run a node?
-With the simulator running:
+### Installing Dependencies
+In an account with sudo privileges, navigate to the root directory of the workspace and run the following:  
+`$ rosdep install --from-paths src --ignore-src --rosdistro=indigo`  
+You will be prompted for your password to perform the necessary APT operations.  
+Following this, first uninstall any current instances of `python-sklearn` you may have on your computer, as they will conflict with the latest version of `scikit-learn`. To do this and install `scikit-learn`, use the following commands:  
+`$ sudo apt-get remove python-sklearn`  
+`$ sudo pip install -U scikit-learn`  
 
-`$ rosrun hratc2017_entry_template name_of_the_node`
+### Finalization
+In the root directory of your workspace, run the following:  
+`$ catkin_make`.  
+`$ chmod +x src/hratc2017_entry_rcmakers/scripts/navigator.py`  
+`$ chmod +x src/hratc2017_entry_rcmakers/scripts/detector.py`
 
-Example:
+## Usage
+With the navigation stack, sensors, and simulation (if applicable) running, run the following command:  
+`$ roslaunch hratc2017_entry_rcmakers hratc2017_rcmakers.launch`
 
-`$ rosrun hratc2017_entry_template simple_control`
-
-### Contributions
-
- - cpp examples by Gonçalo Cabrita and Renan Maffei;
- - python examples by Guilherme Franco and Renan Maffei;
-
+## Contributions
+* Ege Çağlar: Navigation and localization
+* Tan Gemicioğlu: Mine detection, methods research
+* Ali Çataltepe: System design and debugging
