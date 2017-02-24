@@ -9,10 +9,6 @@
   <maintainer email="tan@gemdata.com.tr">Tan Gemicioglu</maintainer>
 
   <license>BSD</license>
-<!--  <url type="website">http://www.inf.ufrgs.br/hratc2017/HRATC2017/Welcome.html</url>
-  <author email="goncabrita@gmail.com">Gonçalo Cabrita</author>
-  <author email="rqmaffei@gmail.com">Renan Maffei</author> -->
-
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>metal_detector_msgs</build_depend>
