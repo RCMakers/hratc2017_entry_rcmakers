@@ -174,7 +174,7 @@ def detectorWrapper():
             if isUniqueMine(minePose.pose):
                 pubMine = rospy.Publisher('/HRATC_FW/set_mine', PoseStamped, queue_size = 1, latch = True)
                 pubMine.publish(minePose)
-                #rospy.loginfo("minePose:"+str(minePose.pose))
+                rospy.loginfo("minePose: "+str(minePose.pose))
                 minePositions.append(minePose.pose)
                 #rospy.loginfo("Wrapper C4")
             
@@ -199,6 +199,7 @@ def isMine():
     prediction = decTree.predict(coilData)
     
     if prediction:
+	rospy.loginfo("DATA DUMP: "+str(coilData))
         return True
     else:
         return False
@@ -238,7 +239,7 @@ def isUniqueMine(newMine):
     for mine in minePositions:
         dist = get_pose_distance(newMine, mine)
         #rospy.loginfo("isUniqueMine distance: "+str(dist))
-        if dist<=1:
+        if dist<=0.5:
             return False
     return True
 
