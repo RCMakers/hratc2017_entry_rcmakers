@@ -46,8 +46,13 @@ rightCoilMedians = []
 
 bufferFull = False
 
+#Simulator values
 distanceFromCenterX = 5.0
 distanceFromCenterY = 4.5
+#Testing values?
+# distanceFromCenterX = 4.5
+# distanceFromCenterY = -5.0
+
 orientationOffset = -0.7
 robotLength = 0.5
 

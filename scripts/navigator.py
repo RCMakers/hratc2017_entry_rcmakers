@@ -18,8 +18,14 @@ std = None
 # Robot data
 robotTwist = Twist()
 robotTwistMeasured = Twist()
-distanceFromCenterX = 4.5
-distanceFromCenterY = 5.0
+
+#Simulator values
+distanceFromCenterX = 5.0
+distanceFromCenterY = 4.5
+#Testing values?
+# distanceFromCenterX = 4.5
+# distanceFromCenterY = -5.0
+
 robotLength = 0.5
 pubVel  = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
 robotPose = PoseWithCovarianceStamped()
