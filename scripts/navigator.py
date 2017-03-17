@@ -27,7 +27,7 @@ distanceFromCenterY = 4.5
 # distanceFromCenterY = -5.0
 
 robotLength = 0.5
-pubVel  = rospy.Publisher('/p3at/cmd_vel', Twist, queue_size=1)
+pubVel  = rospy.Publisher('/RosAria/cmd_vel', Twist, queue_size=1)
 robotPose = PoseWithCovarianceStamped()
 initialPose = PoseWithCovarianceStamped()
 stepPose = PoseWithCovarianceStamped()
