@@ -14,6 +14,8 @@ from tf import transformations
 from sklearn.datasets import load_svmlight_file
 from sklearn import tree
 
+#LOGFILE = open("temp_data.txt","w")
+
 std = None
 
 transformer = None
@@ -98,9 +100,9 @@ def updateRobotPose(ekfPose):
 
     updateCoilPoseManually(poseCache.pose.pose)
 
-    tmp = poseCache.pose.pose.position.x
-    poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
-    poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
+    #tmp = poseCache.pose.pose.position.x
+    #poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
+    #poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
     if (poseCache.pose.pose.orientation.z >= np.sin(np.pi/3.0) and poseCache.pose.pose.orientation.w >= -0.5) or (poseCache.pose.pose.orientation.z >= np.sin(np.pi/4.0) and poseCache.pose.pose.orientation.w <= np.cos(np.pi/4.0)):
         poseCache.pose.pose.orientation.z = -poseCache.pose.pose.orientation.z
         poseCache.pose.pose.orientation.w = -poseCache.pose.pose.orientation.w
@@ -144,9 +146,9 @@ def updateCoilPoseManually(referencePose):
     leftCoilPose.pose = pose_msg_from_matrix(corrected_Mat_L)
     
     poseCacheL = leftCoilPose
-    tmp = poseCacheL.pose.position.x
-    poseCacheL.pose.position.x = poseCacheL.pose.position.y+distanceFromCenterX
-    poseCacheL.pose.position.y = -tmp+distanceFromCenterY
+    #tmp = poseCacheL.pose.position.x
+    #poseCacheL.pose.position.x = poseCacheL.pose.position.y+distanceFromCenterX
+    #poseCacheL.pose.position.y = -tmp+distanceFromCenterY
     
     leftCoilPose = poseCacheL    
 
@@ -154,9 +156,9 @@ def updateCoilPoseManually(referencePose):
     rightCoilPose.pose = pose_msg_from_matrix(corrected_Mat_R)
     
     poseCacheR = rightCoilPose
-    tmp = poseCacheR.pose.position.x
-    poseCacheR.pose.position.x = poseCacheR.pose.position.y+distanceFromCenterX
-    poseCacheR.pose.position.y = -tmp+distanceFromCenterY
+    #tmp = poseCacheR.pose.position.x
+    #poseCacheR.pose.position.x = poseCacheR.pose.position.y+distanceFromCenterX
+    #poseCacheR.pose.position.y = -tmp+distanceFromCenterY
     
     rightCoilPose = poseCacheR
 
@@ -196,10 +198,10 @@ def isMine():
     rightCoilStdDev = np.std(coilRightSignalBuffer)
     leftMeanRateOfChange = leftCoilMeans[-1] - leftCoilMeans[0]
     rightMeanRateOfChange = rightCoilMeans[-1] - rightCoilMeans[0]
-    meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
-    mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
     
-    coilData = [[leftCoil, rightCoil, leftCoilMean, leftCoilMedian, rightCoilMean, rightCoilMedian, leftCoilStdDev, rightCoilStdDev, leftMeanRateOfChange, rightMeanRateOfChange, meansDiffOverSum, mediansDiffOverSum]]
+    coilData = [[leftCoil, rightCoil, leftCoilMean, leftCoilMedian, rightCoilMean, rightCoilMedian, leftCoilStdDev, rightCoilStdDev, leftMeanRateOfChange, rightMeanRateOfChange]]
+
+    #LOGFILE.write("0 1:"+str(leftCoil)+" 2:"+str(rightCoil)+" 3:"+str(leftCoilMean)+" 4:"+str(leftCoilMedian)+" 5:"+str(rightCoilMean)+" 6:"+str(rightCoilMedian)+" 7:"+str(leftCoilStdDev)+" 8:"+str(rightCoilStdDev)+" 9:"+str(leftMeanRateOfChange)+" 10:"+str(rightMeanRateOfChange)+"\n")
 
     prediction = decTree.predict(coilData)
     
@@ -208,33 +210,6 @@ def isMine():
         return True
     else:
         return False
-
-def isMineNear():
-    #FEATURES
-    leftCoil = coils.left_coil
-    rightCoil = coils.right_coil
-    leftCoilMean = leftCoilMeans[-1]
-    leftCoilMedian = leftCoilMedians[-1]
-    rightCoilMean = rightCoilMeans[-1]
-    rightCoilMedian = rightCoilMedians[-1]
-    leftCoilStdDev = np.std(coilLeftSignalBuffer)
-    rightCoilStdDev = np.std(coilRightSignalBuffer)
-    leftMeanRateOfChange = leftCoilMeans[-1] - leftCoilMeans[0]
-    rightMeanRateOfChange = rightCoilMeans[-1] - rightCoilMeans[0]
-    meansDiffOverSum = (leftCoilMean-rightCoilMean)/(leftCoilMean+rightCoilMean)
-    mediansDiffOverSum = (leftCoilMedian-rightCoilMedian)/(leftCoilMedian+rightCoilMedian)
-    
-    coilData = [[leftCoil, rightCoil, leftCoilMean, leftCoilMedian, rightCoilMean, rightCoilMedian, leftCoilStdDev, rightCoilStdDev, leftMeanRateOfChange, rightMeanRateOfChange, meansDiffOverSum, mediansDiffOverSum]]
-    
-    prediction = decTreeNearing.predict(coilData)
-    
-    if prediction:
-        #rospy.loginfo("MINE NEAR"+str(coilData))
-        rospy.sleep(5)
-        mineNear = Bool()
-        mineNear.data = True
-        nearPub = rospy.Publisher('/detector/mine_near', Bool, queue_size = 1, latch = True)
-        nearPub.publish(mineNear)   
 
 # Check if mine is within range of current known mines
 def isUniqueMine(newMine):
