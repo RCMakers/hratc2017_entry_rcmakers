@@ -49,8 +49,8 @@ rightCoilMedians = []
 bufferFull = False
 
 #Simulator values
-distanceFromCenterX = 5.0
-distanceFromCenterY = 4.5
+#distanceFromCenterX = 5.0
+#distanceFromCenterY = 4.5
 #Testing values?
 # distanceFromCenterX = 4.5
 # distanceFromCenterY = -5.0
@@ -101,8 +101,8 @@ def updateRobotPose(ekfPose):
     updateCoilPoseManually(poseCache.pose.pose)
 
     #tmp = poseCache.pose.pose.position.x
-    #poseCache.pose.pose.position.x = poseCache.pose.pose.position.y+distanceFromCenterX
-    #poseCache.pose.pose.position.y = -tmp+distanceFromCenterY
+    poseCache.pose.pose.position.x = -poseCache.pose.pose.position.x
+    poseCache.pose.pose.position.y = -poseCache.pose.pose.position.y
     if (poseCache.pose.pose.orientation.z >= np.sin(np.pi/3.0) and poseCache.pose.pose.orientation.w >= -0.5) or (poseCache.pose.pose.orientation.z >= np.sin(np.pi/4.0) and poseCache.pose.pose.orientation.w <= np.cos(np.pi/4.0)):
         poseCache.pose.pose.orientation.z = -poseCache.pose.pose.orientation.z
         poseCache.pose.pose.orientation.w = -poseCache.pose.pose.orientation.w
@@ -147,8 +147,8 @@ def updateCoilPoseManually(referencePose):
     
     poseCacheL = leftCoilPose
     #tmp = poseCacheL.pose.position.x
-    #poseCacheL.pose.position.x = poseCacheL.pose.position.y+distanceFromCenterX
-    #poseCacheL.pose.position.y = -tmp+distanceFromCenterY
+    poseCacheL.pose.position.x = -poseCacheL.pose.position.x
+    poseCacheL.pose.position.y = -poseCacheL.pose.position.y
     
     leftCoilPose = poseCacheL    
 
@@ -157,8 +157,8 @@ def updateCoilPoseManually(referencePose):
     
     poseCacheR = rightCoilPose
     #tmp = poseCacheR.pose.position.x
-    #poseCacheR.pose.position.x = poseCacheR.pose.position.y+distanceFromCenterX
-    #poseCacheR.pose.position.y = -tmp+distanceFromCenterY
+    poseCacheR.pose.position.x = -poseCacheR.pose.position.x
+    poseCacheR.pose.position.y = -poseCacheR.pose.position.y
     
     rightCoilPose = poseCacheR
 
