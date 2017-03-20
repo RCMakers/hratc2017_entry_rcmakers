@@ -16,7 +16,7 @@
       <rosparam param="odom0_config">[true, true, false,
                                       false, false, false,
                                       true, true, false,
-                                      false, false, true,
+                                      false, false, false,
                                       false, false, false]</rosparam>
       <param name="imu0" value="/imu/data"/>
       <rosparam param="imu0_config">[false, false, false,
@@ -28,8 +28,8 @@
      <param name="imu0_differential" value="false"/>
      <param name="odom0_relative" value="false"/>
      <param name="imu0_relative" value="false"/>
-     <param name="imu0_remove_gravitational_acceleration" value="false"/>
+     <param name="imu0_remove_gravitational_acceleration" value="true"/>
    </node>   
-  <node name="navigator" pkg="hratc2017_entry_rcmakers" type="navigator.py" respawn="true" output="screen"/>
-   <node name="detector" pkg="hratc2017_entry_rcmakers" type="detector.py" respawn="true" output="screen"/>
+   <!--<node name="navigator" pkg="hratc2017_entry_rcmakers" type="navigator.py" respawn="true" output="screen"/>
+   <node name="detector" pkg="hratc2017_entry_rcmakers" type="detector.py" respawn="true" output="screen"/>-->
 </launch>
