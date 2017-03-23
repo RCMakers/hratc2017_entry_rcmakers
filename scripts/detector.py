@@ -100,9 +100,9 @@ def updateRobotPose(ekfPose):
 
     updateCoilPoseManually(poseCache.pose.pose)
 
-    #tmp = poseCache.pose.pose.position.x
-    #poseCache.pose.pose.position.x = poseCache.pose.pose.position.x
-    #poseCache.pose.pose.position.y = poseCache.pose.pose.position.y
+    tmp = poseCache.pose.pose.position.y
+    poseCache.pose.pose.position.x = -poseCache.pose.pose.position.x
+    poseCache.pose.pose.position.y = -tmp
     if (poseCache.pose.pose.orientation.z >= np.sin(np.pi/3.0) and poseCache.pose.pose.orientation.w >= -0.5) or (poseCache.pose.pose.orientation.z >= np.sin(np.pi/4.0) and poseCache.pose.pose.orientation.w <= np.cos(np.pi/4.0)):
         poseCache.pose.pose.orientation.z = -poseCache.pose.pose.orientation.z
         poseCache.pose.pose.orientation.w = -poseCache.pose.pose.orientation.w
@@ -126,7 +126,8 @@ def updateCoilPoseManually(referencePose):
         
         transListener.waitForTransform('base_link', 'right_coil', now, rospy.Duration(2.0))
         (transR,rotR) = transListener.lookupTransform('base_link', 'right_coil', now)
-    except:
+    except Exception as a:
+        rospy.loginfo(str(a))
         return
 
     localCoil_Mat_L = transformations.concatenate_matrices(transformations.translation_matrix(transL), transformations.quaternion_matrix(rotL))
@@ -146,9 +147,9 @@ def updateCoilPoseManually(referencePose):
     leftCoilPose.pose = pose_msg_from_matrix(corrected_Mat_L)
     
     poseCacheL = leftCoilPose
-    #tmp = poseCacheL.pose.position.x
-    #poseCacheL.pose.position.x = -poseCacheL.pose.position.x
-    #poseCacheL.pose.position.y = -poseCacheL.pose.position.y
+    tmp = poseCacheL.pose.position.y
+    poseCacheL.pose.position.x = -poseCacheL.pose.position.x
+    poseCacheL.pose.position.y = -tmp
     
     leftCoilPose = poseCacheL    
 
@@ -156,9 +157,9 @@ def updateCoilPoseManually(referencePose):
     rightCoilPose.pose = pose_msg_from_matrix(corrected_Mat_R)
     
     poseCacheR = rightCoilPose
-    #tmp = poseCacheR.pose.position.x
-    #poseCacheR.pose.position.x = -poseCacheR.pose.position.x
-    #poseCacheR.pose.position.y = -poseCacheR.pose.position.y
+    tmp = poseCacheR.pose.position.y
+    poseCacheR.pose.position.x = -poseCacheR.pose.position.x
+    poseCacheR.pose.position.y = -tmp
     
     rightCoilPose = poseCacheR
 
@@ -201,13 +202,13 @@ def isMine():
     
     coilData = [[leftCoil, rightCoil, leftCoilMean, leftCoilMedian, rightCoilMean, rightCoilMedian, leftCoilStdDev, rightCoilStdDev, leftMeanRateOfChange, rightMeanRateOfChange]]
 
-    #LOGFILE.write("0 1:"+str(leftCoil)+" 2:"+str(rightCoil)+" 3:"+str(leftCoilMean)+" 4:"+str(leftCoilMedian)+" 5:"+str(rightCoilMean)+" 6:"+str(rightCoilMedian)+" 7:"+str(leftCoilStdDev)+" 8:"+str(rightCoilStdDev)+" 9:"+str(leftMeanRateOfChange)+" 10:"+str(rightMeanRateOfChange)+"\n")
+    #LOGFILE.write(str(mineExists)+" 1:"+str(leftCoil)+" 2:"+str(rightCoil)+" 3:"+str(leftCoilMean)+" 4:"+str(leftCoilMedian)+" 5:"+str(rightCoilMean)+" 6:"+str(rightCoilMedian)+" 7:"+str(leftCoilStdDev)+" 8:"+str(rightCoilStdDev)+" 9:"+str(leftMeanRateOfChange)+" 10:"+str(rightMeanRateOfChange)+"\n")
 
     prediction = decTree.predict(coilData)
     
     if prediction:
-	rospy.loginfo("DATA DUMP: "+str(coilData))
-        return True
+	#rospy.loginfo("DATA DUMP: "+str(robotPose.pose.pose.position))
+        return False
     else:
         return False
 
@@ -258,20 +259,20 @@ if __name__ == '__main__':
     transListener = tf.TransformListener()
 
     decTree = tree.DecisionTreeClassifier()
-    decTreeNearing = tree.DecisionTreeClassifier()
+    #decTreeNearing = tree.DecisionTreeClassifier()
 
     directory = os.path.dirname(os.path.abspath(__file__))
     
     # Train decision trees
     detectionTrainPath = os.path.join(directory, '..', 'data', 'training.txt')
-    nearingTrainPath = os.path.join(directory, '..', 'data', 'nearingtraining.txt')
+    #nearingTrainPath = os.path.join(directory, '..', 'data', 'nearingtraining.txt')
 
     #rospy.loginfo("start training trees")
     X_train, y_train = load_svmlight_file(detectionTrainPath)
     decTree = decTree.fit(X_train.toarray(), y_train)
 
-    X_train_nearing, y_train_nearing = load_svmlight_file(nearingTrainPath)
-    decTreeNearing = decTreeNearing.fit(X_train_nearing.toarray(), y_train_nearing)
+    #X_train_nearing, y_train_nearing = load_svmlight_file(nearingTrainPath)
+    #decTreeNearing = decTreeNearing.fit(X_train_nearing.toarray(), y_train_nearing)
     #rospy.loginfo("trained trees")
     
     # Subscribing to relevant topics to bring the robot or simulation to live data

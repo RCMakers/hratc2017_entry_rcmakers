@@ -1,5 +1,5 @@
 <launch>
-   <param name="use_sim_time" value="false"/>
+   <param name="use_sim_time" value="true"/>
    <node pkg = "tf" type="tf_remap" name="tf_remapper" output="screen">
       <rosparam param="mappings">
          [{old: base_imu, new: imu_link}]
@@ -12,7 +12,7 @@
       <param name="odom_frame" value="odom"/>
       <param name="base_link_frame" value="base_link"/>
       <param name="world_frame" value="odom"/>
-      <param name="odom0" value="/RosAria/pose"/>
+      <param name="odom0" value="/p3at/odom"/>
       <rosparam param="odom0_config">[true, true, false,
                                       false, false, false,
                                       true, true, false,
@@ -30,6 +30,6 @@
      <param name="imu0_relative" value="false"/>
      <param name="imu0_remove_gravitational_acceleration" value="true"/>
    </node>   
-   <!--<node name="navigator" pkg="hratc2017_entry_rcmakers" type="navigator.py" respawn="true" output="screen"/>
-   <node name="detector" pkg="hratc2017_entry_rcmakers" type="detector.py" respawn="true" output="screen"/>-->
+   <node name="navigator" pkg="hratc2017_entry_rcmakers" type="navigator.py" respawn="true" output="screen"/>
+   <node name="detector" pkg="hratc2017_entry_rcmakers" type="detector.py" respawn="true" output="screen"/>
 </launch>
