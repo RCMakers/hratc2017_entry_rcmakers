@@ -100,9 +100,9 @@ def updateRobotPose(ekfPose):
 
     updateCoilPoseManually(poseCache.pose.pose)
 
-    tmp = poseCache.pose.pose.position.y
-    poseCache.pose.pose.position.x = -poseCache.pose.pose.position.x
-    poseCache.pose.pose.position.y = -tmp
+    tmp = poseCache.pose.pose.position.x
+    poseCache.pose.pose.position.x = -poseCache.pose.pose.position.y
+    poseCache.pose.pose.position.y = tmp
     if (poseCache.pose.pose.orientation.z >= np.sin(np.pi/3.0) and poseCache.pose.pose.orientation.w >= -0.5) or (poseCache.pose.pose.orientation.z >= np.sin(np.pi/4.0) and poseCache.pose.pose.orientation.w <= np.cos(np.pi/4.0)):
         poseCache.pose.pose.orientation.z = -poseCache.pose.pose.orientation.z
         poseCache.pose.pose.orientation.w = -poseCache.pose.pose.orientation.w
@@ -147,9 +147,9 @@ def updateCoilPoseManually(referencePose):
     leftCoilPose.pose = pose_msg_from_matrix(corrected_Mat_L)
     
     poseCacheL = leftCoilPose
-    tmp = poseCacheL.pose.position.y
-    poseCacheL.pose.position.x = -poseCacheL.pose.position.x
-    poseCacheL.pose.position.y = -tmp
+    tmp = poseCacheL.pose.position.x
+    poseCacheL.pose.position.x = -poseCacheL.pose.position.y
+    poseCacheL.pose.position.y = tmp
     
     leftCoilPose = poseCacheL    
 
@@ -157,9 +157,9 @@ def updateCoilPoseManually(referencePose):
     rightCoilPose.pose = pose_msg_from_matrix(corrected_Mat_R)
     
     poseCacheR = rightCoilPose
-    tmp = poseCacheR.pose.position.y
-    poseCacheR.pose.position.x = -poseCacheR.pose.position.x
-    poseCacheR.pose.position.y = -tmp
+    tmp = poseCacheR.pose.position.x
+    poseCacheR.pose.position.x = -poseCacheR.pose.position.y
+    poseCacheR.pose.position.y = tmp
     
     rightCoilPose = poseCacheR
 

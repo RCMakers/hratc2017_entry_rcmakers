@@ -13,7 +13,7 @@ from tf import transformations
 from tf.transformations import euler_from_quaternion
 import math
 
-USING_SIM = True
+USING_SIM = False
 
 firstInc = True
 
@@ -61,6 +61,9 @@ fastLinearSpeed = 0.4
 turnDistance = 1.5
 avoidSideDist = 1
 avoidForwardDist = 1.5
+avoidDist = 0.5
+avoidDistFwd = 1.0
+avoidDistBack = 0.5
 
 turningError = 3
 
@@ -77,7 +80,9 @@ waypoints = [[0.0,0.0],[11.364583, 4.0], [10.841441, -1.8], [9.754374499999999, 
              [-7.9175522500000035, 3.15], [-9.051795500000004, 3.1], [-8.725756, -1.35], [-9.8128225, -1.325], 
              [-10.186038750000002, 3.05], [-11.320282, 3.0], [-10.899889, -1.3]]
 
-currentWaypoint = 0
+swappedOutWaypoints = []
+
+currentWaypoint = [0.0,0.0]
 goalAngle = 0
 
 ######################### AUXILIARY FUNCTIONS ############################
@@ -132,6 +137,26 @@ def getGoalAngle(index1, index2):
     else:
         return angle + 270
 
+def getGoalAnglePoints(point1, point2):
+    if point2[0] == point1[0]:
+        if point2[1] < point1[1]:
+            return 180
+        else:
+            return 0
+    elif point2[1] == point1[1]:
+        if point2[0] < point1[0]:
+            return 90
+        else:
+            return 270
+    angle = math.degrees(math.atan((point1[0]-point2[0])/(point2[1]-point1[1])))
+    if point2[1] > point1[1]:
+        if angle <0:
+            return angle+360
+        else:
+            return angle
+    else:
+        return angle+180
+
 ######################### CALLBACKS ############################
 
 # Laser range-finder callback
@@ -166,7 +191,7 @@ def checkMine():
     return False
 
 def updateRobotPose(ekfPose):
-    global turnStep, robotPose, robotTwistMeasured, transListener, robotTwist, pubVel, stepPose, initialPose, goalPose, waypoints, currentWaypoint, goal, goalAngle
+    global turnStep, robotPose, robotTwistMeasured, transListener, robotTwist, pubVel, stepPose, goalPose, waypoints, currentWaypoint, goal, goalAngle, avoidingObstacle, swappedOutWaypoints
     robotTwistMeasured = ekfPose.twist
     poseCache = PoseWithCovarianceStamped()
     poseCache.pose = ekfPose.pose
@@ -175,365 +200,124 @@ def updateRobotPose(ekfPose):
     poseCache.pose.pose.position.x = -poseCache.pose.pose.position.y
     poseCache.pose.pose.position.y = tmp
     robotPose = poseCache
+    poseList = [robotPose.pose.pose.position.x, robotPose.pose.pose.position.y]
     logMessage = str(getAngle(robotPose.pose.pose))
-    logMsg2 = str(goalAngle)
-    rospy.loginfo("Angle: " + logMessage + " Goalangle: "+logMsg2)
-    if first:
-        global first
-        initialPose = robotPose
-        first = False
-        #stepPose.pose.pose.position.x = robotPose.pose.pose.position.x
-        #stepPose.pose.pose.position.y = robotPose.pose.pose.position.y-mapDistanceY
-
-
-    '''if abs(robotPose.pose.pose.position.y-stepPose.pose.pose.position.y) <= 0.3 or turning:
-	rospy.loginfo("turning")
-        stepPoseCache = turnAround()
-        global avoidingObstacle, obstacleStep, obstacleSeq
-        avoidingObstacle = False
-        obstacleSeq = 0
-        obstacleStep = 1
-        if stepPoseCache != None:
-            stepPose = stepPoseCache
-    '''
-    if math.sqrt(abs((robotPose.pose.pose.position.x - waypoints[currentWaypoint][0])**2+(robotPose.pose.pose.position.y - waypoints[currentWaypoint][1])**2)) < 0.3 and turnStep < 2:
-        rospy.loginfo("Arrived to Waypoint " + str(currentWaypoint))
-        if firstInc:
-            currentWaypoint = currentWaypoint+1
-            global firstInc
-            firstInc = False
-        goalAngle = getGoalAngle(currentWaypoint-1,currentWaypoint)
-        rospy.loginfo("goalAngle: "+str(goalAngle))
-        if turnStep == 1:
-            if abs(goalAngle - getAngle(robotPose.pose.pose)) > turningError:
-                robotTwist.angular.z = angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                turnStep = 2
-
-    if math.sqrt(abs((robotPose.pose.pose.position.x - waypoints[currentWaypoint][0])**2+(robotPose.pose.pose.position.y - waypoints[currentWaypoint][1])**2)) > 0.3 and turnStep == 2:
-        turnStep = 1
-        global firstInc
-        firstInc = True
-
-    elif checkMine() or avoidingObstacle:
-    	if checkMine():
-    	    rospy.loginfo("avoiding a mine")
-    	else:
-    	    rospy.loginfo("avoiding an obstacle")
-            global avoidingObstacle
-            avoidingObstacle = True
-            avoidObstacle()
+    logMsg2 = str(getGoalAnglePoints(poseList, currentWaypoint))
+    rospy.loginfo("Angle: " + logMessage + " Goalangle: "+logMsg2 + " waypoint: "+str(currentWaypoint))
+    obstaclePresent = False
     lazors = []
     if len(laserInfo.ranges) > 0:
-        for h in laserInfo.ranges[270:550]:
+        startLaser = len(laserInfo.ranges)/2-int((np.pi/4)/laserInfo.angle_increment)
+        endLaser = len(laserInfo.ranges)/2+int((np.pi/4)/laserInfo.angle_increment)
+        for h in laserInfo.ranges[startLaser:endLaser]:
             if h != 0.0:
                 lazors.append(h)
-    elif len(lazors) > 0 and np.min(lazors) <= 0.05:
-	    rospy.loginfo("avoiding an obstacle: {} away".format(min(lazors)))
-            global avoidingObstacle
+        if min(lazors) <= 1.0:
+            rospy.loginfo("obstacle detected {} away".format(str(min(lazors))))
+            obstaclePresent = True
+
+    if checkMine():
+        rospy.loginfo("mine near")
+        obstaclePresent = True
+
+    if len(waypoints) == 0 and avoidingObstacle:
+        avoidingObstacle = False
+        waypoints = swappedOutWaypoints
+        currentWaypoint = waypoints[0]
+
+
+
+    if math.sqrt(abs((robotPose.pose.pose.position.x - currentWaypoint[0])**2+(robotPose.pose.pose.position.y - currentWaypoint[1])**2)) < 0.3:
+        rospy.loginfo("Arrived to Waypoint " + str(currentWaypoint))
+        if avoidingObstacle:
+            swappedOutWaypoints.pop(0)
+            if len(swappedOutWaypoints) > 0:
+                currentWaypoint = swappedOutWaypoints[0]
+            else:
+                avoidingObstacle = False
+                currentWaypoint = waypoints[0]
+        else:
+            waypoints.pop(0)
+            if len(waypoints) > 0:
+                currentWaypoint = waypoints[0]
+       	    else:
+                robotTwist.linear.x = 0.0
+                robotTwist.angular.z = 0.0
+                pubVel.publish(robotTwist)
+                rospy.signal_shutdown("path completed")
+                return 0
+
+    elif obstaclePresent and (not avoidingObstacle):
+        rospy.loginfo("avoid1")
+        if not avoidingObstacle:
+            rospy.loginfo("avoid2")
             avoidingObstacle = True
-            avoidObstacle()
+            swappedOutWaypoints = []
+            avoidAngle1 = getAngle(robotPose.pose.pose)+90
+            if avoidAngle1 >= 360:
+                avoidAngle1 = avoidAngle1-360
+            avoidAngle2 = getAngle(robotPose.pose.pose)-90
+            if avoidAngle2 < 0:
+                avoidAngle2 = avoidAngle2+360
+            avoidWaypoint0 = [robotPose.pose.pose.position.x+np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack, robotPose.pose.pose.position.y-np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack]
+            avoidWaypoint1 = [avoidWaypoint0[0]-np.sin(np.deg2rad(avoidAngle1))*avoidDist, avoidWaypoint0[1]+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
+            avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd]
+            avoidWaypoint3 = [avoidWaypoint2[0]-np.sin(np.deg2rad(avoidAngle2))*avoidDist, avoidWaypoint2[1]+np.cos(np.deg2rad(avoidAngle2))*avoidDist]
+            currentWaypoint = avoidWaypoint1
+            swappedOutWaypoints = [avoidWaypoint0, avoidWaypoint1, avoidWaypoint2, avoidWaypoint3]
+        elif False:#avoidingObstacle and len(waypoints) < 3:
+            rospy.loginfo("avoid3")
+            avoidAngle1 = getAngle(robotPose.pose.pose)+90
+            if avoidAngle1 >= 360:
+                avoidAngle1 = avoidAngle1-360
+            avoidAngle2 = getAngle(robotPose.pose.pose)-90
+            if avoidAngle2 < 0:
+                avoidAngle2 = avoidAngle2+360
+            avoidWaypoint1 = [robotPose.pose.pose.position.x-np.sin(np.deg2rad(avoidAngle1))*avoidDist, robotPose.pose.pose.position.y+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
+            avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDist, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDist]
+            avoidWaypoint3 = [avoidWaypoint2[0]-np.sin(np.deg2rad(avoidAngle2))*avoidDist, avoidWaypoint2[1]+np.cos(np.deg2rad(avoidAngle2))*avoidDist]
+            currentWaypoint = avoidWaypoint1
+            swappedOutWaypoints = [avoidWaypoint1, avoidWaypoint2, avoidWaypoint3]
+
+    elif abs(getAngle(robotPose.pose.pose)-getGoalAnglePoints(poseList, currentWaypoint)) >= 5:
+        robotTwist.linear.x = 0.0
+        rightTurnThresh1 = getAngle(robotPose.pose.pose)-180
+        leftTurnThresh1 = getAngle(robotPose.pose.pose)+180
+        if rightTurnThresh1 < 0:
+            rightTurnThresh1 = rightTurnThresh1+360
+            if getGoalAnglePoints(poseList, currentWaypoint) < getAngle(robotPose.pose.pose) or getGoalAnglePoints(poseList, currentWaypoint) > rightTurnThresh1:
+                robotTwist.angular.z = -angularSpeed
+            else:
+                robotTwist.angular.z = angularSpeed
+        elif leftTurnThresh1 >= 360:
+            leftTurnThresh1 = leftTurnThresh1-360
+            if getGoalAnglePoints(poseList, currentWaypoint) > getAngle(robotPose.pose.pose) or getGoalAnglePoints(poseList, currentWaypoint) < leftTurnThresh1:
+                robotTwist.angular.z = angularSpeed
+            else:
+                robotTwist.angular.z = -angularSpeed
+        else:
+            robotTwist.angular.z = angularSpeed
+        pubVel.publish(robotTwist)
     else:
 	rospy.loginfo("going straight")
         robotTwist.angular.z = 0.0
         robotTwist.linear.x = fastLinearSpeed
         pubVel.publish(robotTwist)
+    if obstaclePresent and avoidingObstacle and len(swappedOutWaypoints) < 3:
+        rospy.loginfo("avoid3")
+        avoidAngle1 = getAngle(robotPose.pose.pose)+90
+        if avoidAngle1 >= 360:
+            avoidAngle1 = avoidAngle1-360
+        avoidAngle2 = getAngle(robotPose.pose.pose)-90
+        if avoidAngle2 < 0:
+            avoidAngle2 = avoidAngle2+360
+        avoidWaypoint1 = [robotPose.pose.pose.position.x-np.sin(np.deg2rad(avoidAngle1))*avoidDist, robotPose.pose.pose.position.y+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
+        avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDist, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDist]
+        avoidWaypoint3 = [avoidWaypoint2[0]-np.sin(np.deg2rad(avoidAngle2))*avoidDist, avoidWaypoint2[1]+np.cos(np.deg2rad(avoidAngle2))*avoidDist]
+        currentWaypoint = avoidWaypoint1
+        swappedOutWaypoints = [avoidWaypoint1, avoidWaypoint2, avoidWaypoint3]
 
 
-######################### NAVIGATION SEQUENCES ############################
-
-def avoidObstacle():
-    global obstacleSeq, obstacleStep, avoidingObstacle, robotTwist, pubVel, obstaclePose
-    rospy.loginfo("obstacleSeq: {} obstacleStep: {} avoidngObstacle:{} obstaclePose x: {} y: {}".format(obstacleSeq, obstacleStep, avoidingObstacle, obstaclePose.pose.pose.position.x, obstaclePose.pose.pose.position.y))
-    turnAngle = None
-    if True:
-        if obstacleStep == 1:
-            if turnAngle == None:
-                turnAngle = getAngle(robotPose.pose.pose) - 90
-                if turnAngle < 0:
-                    turnAngle += 360
-            if abs(turnAngle-getAngle(robotPose.pose.pose)) > turningError: #turn left
-                robotTwist.angular.z = angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                robotTwist.angular.z = 0.0
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                obstaclePose = robotPose
-                obstacleStep = 2
-                turnAngle = None
-
-        elif obstacleStep == 2:
-            if abs(obstaclePose.pose.pose.position.x-robotPose.pose.pose.position.x) < avoidSideDist: #go forward for 1 unit
-                robotTwist.linear.x = slowLinearSpeed
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                robotTwist.linear.x = 0.0 
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-                obstacleStep = 3
-
-        elif obstacleStep == 3:
-            if turnAngle == None:
-                turnAngle = getAngle(robotPose.pose.pose) + 90
-                if turnAngle > 360:
-                    turnAngle -= 360
-            if abs(turnAngle-getAngle(robotPose.pose.pose)) > turningError: #turn right
-                robotTwist.angular.z = -angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                robotTwist.angular.z = 0.0 
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                obstaclePose = robotPose 
-                obstacleStep = 4 
-
-        elif obstacleStep == 4:
-            if turnAngle == None:
-                turnAngle = getAngle(robotPose.pose.pose) + 90
-                if turnAngle > 360:
-                    turnAngle -= 360
-            if abs(turnAngle-getAngle(robotPose.pose.pose)) > turningError: #turn right
-                robotTwist.angular.z = -angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                robotTwist.linear.x = 0.0 
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-                obstacleStep = 5
-
-        elif obstacleStep == 5:
-            if getAngle(robotPose.pose.pose) < 90: #turn left
-                robotTwist.angular.z = angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                robotTwist.angular.z = 0.0
-                robotTwist.linear.x = 0.0 
-                pubVel.publish(robotTwist)
-                obstaclePose = robotPose 
-                obstacleStep = 6
-
-        elif obstacleStep == 7:
-            if abs(obstaclePose.pose.pose.position.x-robotPose.pose.pose.position.x) < avoidSideDist: #go forward for 1 unit
-                robotTwist.linear.x = slowLinearSpeed
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                robotTwist.linear.x = 0.0 
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-                obstacleStep = 8
-
-        elif obstacleStep == 8:
-            if turnAngle == None:
-                turnAngle = getAngle(robotPose.pose.pose) - 90
-                if turnAngle < 0:
-                    turnAngle += 360
-            if abs(turnAngle-getAngle(robotPose.pose.pose)) > turningError: #turn left
-                robotTwist.angular.z = angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                robotTwist.angular.z = 0.0
-                robotTwist.linear.x = 0.0 
-                pubVel.publish(robotTwist)
-                obstacleStep = 1
-                obstacleSeq = 0
-                avoidingObstacle = False
-                return
-
-    '''elif obstacleSeq == 2:
-        if obstacleStep == 1:
-            if getAngle(robotPose.pose.pose) < 270: #turn left
-                robotTwist.angular.z = angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:    
-                robotTwist.angular.z = 0.0
-                robotTwist.linear.x = 0.0 
-                pubVel.publish(robotTwist)
-                obstacleStep = 2
-                obstaclePose = robotPose
-
-        elif obstacleStep == 2:
-            if abs(obstaclePose.pose.pose.position.x-robotPose.pose.pose.position.x) < avoidSideDist: #go forward for 1 unit
-                robotTwist.linear.x = slowLinearSpeed
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-            else:  
-                robotTwist.linear.x = 0.0
-                robotTwist.angular.z = 0.0 
-                pubVel.publish(robotTwist)
-                obstacleStep = 3
-
-        elif obstacleStep == 3:
-            if getAngle(robotPose.pose.pose) > 180: #turn right
-                robotTwist.angular.z = -angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                robotTwist.angular.z = 0.0
-                robotTwist.linear.x = 0.0 
-                pubVel.publish(robotTwist)
-                obstaclePose = robotPose  
-                obstacleStep = 4
-
-        elif obstacleStep == 4:
-            if abs(obstaclePose.pose.pose.position.y-robotPose.pose.pose.position.y) < avoidForwardDist: #go forward for 2 unit
-                robotTwist.linear.x = slowLinearSpeed
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-            else:    
-                robotTwist.linear.x = 0.0
-                robotTwist.angular.z = 0.0 
-                pubVel.publish(robotTwist)
-                obstacleStep = 5
-
-        elif obstacleStep == 5:
-            if getAngle(robotPose.pose.pose) > 90: #turn right
-                robotTwist.angular.z = -angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:   
-                robotTwist.angular.z = 0.0
-                robotTwist.linear.x = 0.0 
-                pubVel.publish(robotTwist)
-                obstaclePose = robotPose 
-                obstacleStep = 6
-
-        elif obstacleStep == 6:
-            if abs(obstaclePose.pose.pose.position.x-robotPose.pose.pose.position.x) < avoidSideDist: #go forward for 1 unit
-                robotTwist.linear.x = slowLinearSpeed
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-            else:  
-                robotTwist.linear.x = 0.0 
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-                obstacleStep = 7
-
-        elif obstacleStep == 7:
-            if getAngle(robotPose.pose.pose) < 180: #turn left
-                robotTwist.angular.z = angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:    
-                robotTwist.angular.z = 0.0 
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                obstacleStep = 1
-                obstacleSeq = 0
-                avoidingObstacle = False
-                return
-
-    elif getAngle(robotPose.pose.pose) == 0:
-        obstacleSeq = 1
-        return
-    elif abs(getAngle(robotPose.pose.pose) - 180) < 2:
-        obstacleSeq = 2
-        return'''
-
-'''
-def turnAround():
-    global turnSeq, turnStep, turning, robotTwist, pubVel, obstaclePose
-    turning = True
-    if turnSeq == 1:
-        if turnStep == 1:
-            if getAngle(robotPose.pose.pose) == 0 or getAngle(robotPose.pose.pose) > 270: #turn left 
-                robotTwist.angular.z = -angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                
-            else:
-                robotTwist.angular.z = 0.0 
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                turnStep = 2
-                obstaclePose = robotPose
-        elif turnStep == 2:
-            if abs(obstaclePose.pose.pose.position.x-robotPose.pose.pose.position.x) < turnDistance: #go forward for 1 unit
-                robotTwist.linear.x = slowLinearSpeed
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-                
-            else:
-                robotTwist.linear.x = 0.0 
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-                turnStep = 3
-        elif turnStep == 3:
-            if getAngle(robotPose.pose.pose) > 180: #turn right
-                robotTwist.angular.z = -angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                
-            else:
-                robotTwist.angular.z = 0.0 
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                turnStep = 4
-                obstaclePose = robotPose  
-        elif turnStep == 4:
-            stepPose = robotPose
-            stepPose.pose.pose.position.y += mapDistanceY
-            turnStep = 1
-            turnSeq = 0
-            turning = False
-            return stepPose
-    
-    elif turnSeq == 2:
-        if turnStep == 1:
-            if getAngle(robotPose.pose.pose) < 270: #turn left
-                robotTwist.angular.z = angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-            else:
-                robotTwist.angular.z = 0.0 
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                obstaclePose = robotPose
-                turnStep = 2
-        elif turnStep == 2:
-            if abs(obstaclePose.pose.pose.position.x-robotPose.pose.pose.position.x) < turnDistance: #go forward for 1 unit
-                robotTwist.linear.x = slowLinearSpeed
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-                
-            else:
-                robotTwist.linear.x = 0.0 
-                robotTwist.angular.z = 0.0
-                pubVel.publish(robotTwist)
-                turnStep = 3
-        elif turnStep == 3:
-            if getAngle(robotPose.pose.pose) > 0: #turn left
-                robotTwist.angular.z = angularSpeed
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                
-            else:
-                robotTwist.angular.z = 0.0 
-                robotTwist.linear.x = 0.0
-                pubVel.publish(robotTwist)
-                turnStep = 4
-        elif turnStep == 4:
-            stepPose = robotPose
-            stepPose.pose.pose.position.y -= mapDistanceY
-            turnStep = 1
-            turnSeq = 0
-            turning = False
-            return stepPose
-    elif robotPose.pose.pose.position.y < -4.0:
-        turnSeq = 1
-    elif robotPose.pose.pose.position.y > 4.0:
-        turnSeq = 2
-'''
 ######################### MAIN ############################
 
 if __name__ == '__main__':
