@@ -208,7 +208,7 @@ def isMine():
     
     if prediction:
 	#rospy.loginfo("DATA DUMP: "+str(robotPose.pose.pose.position))
-        return False
+        return True
     else:
         return False
 

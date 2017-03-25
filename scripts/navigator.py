@@ -53,7 +53,7 @@ obstacleSeq = 0
 obstacleStep = 1 
 avoidingObstacle = False
 
-mineTriggerDist = 0.7
+mineTriggerDist = 0.5
 mapDistanceY = 8.0
 slowLinearSpeed = 0.3
 angularSpeed = 0.6
@@ -61,8 +61,8 @@ fastLinearSpeed = 0.4
 turnDistance = 1.5
 avoidSideDist = 1
 avoidForwardDist = 1.5
-avoidDist = 0.5
-avoidDistFwd = 1.0
+avoidDist = 1.5
+avoidDistFwd = 1.5
 avoidDistBack = 0.5
 
 turningError = 3
@@ -110,8 +110,8 @@ def pose_msg_from_matrix(transformation):
 def get_pose_distance(pose1, pose2):
     matrix1 = matrix_from_pose_msg(pose1)
     matrix2 = matrix_from_pose_msg(pose2)
-    rospy.loginfo("matrix1: "+str(matrix1))
-    rospy.loginfo("matrix2: "+str(matrix2))
+    #rospy.loginfo("matrix1: "+str(matrix1))
+    #rospy.loginfo("matrix2: "+str(matrix2))
     return np.linalg.norm(matrix1[:,3]-matrix2[:,3])
 
 def getAngle(drivePose):
@@ -227,10 +227,11 @@ def updateRobotPose(ekfPose):
 
 
 
-    if math.sqrt(abs((robotPose.pose.pose.position.x - currentWaypoint[0])**2+(robotPose.pose.pose.position.y - currentWaypoint[1])**2)) < 0.3:
+    if (math.sqrt(abs((robotPose.pose.pose.position.x - currentWaypoint[0])**2+(robotPose.pose.pose.position.y - currentWaypoint[1])**2)) < 0.3) or (checkMine() and math.sqrt(abs((robotPose.pose.pose.position.x - currentWaypoint[0])**2+(robotPose.pose.pose.position.y - currentWaypoint[1])**2)) < 0.8):
         rospy.loginfo("Arrived to Waypoint " + str(currentWaypoint))
         if avoidingObstacle:
-            swappedOutWaypoints.pop(0)
+            if len(swappedOutWaypoints) > 0:
+                swappedOutWaypoints.pop(0)
             if len(swappedOutWaypoints) > 0:
                 currentWaypoint = swappedOutWaypoints[0]
             else:
@@ -259,25 +260,16 @@ def updateRobotPose(ekfPose):
             avoidAngle2 = getAngle(robotPose.pose.pose)-90
             if avoidAngle2 < 0:
                 avoidAngle2 = avoidAngle2+360
-            avoidWaypoint0 = [robotPose.pose.pose.position.x+np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack, robotPose.pose.pose.position.y-np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack]
-            avoidWaypoint1 = [avoidWaypoint0[0]-np.sin(np.deg2rad(avoidAngle1))*avoidDist, avoidWaypoint0[1]+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
-            avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd]
-            avoidWaypoint3 = [avoidWaypoint2[0]-np.sin(np.deg2rad(avoidAngle2))*avoidDist, avoidWaypoint2[1]+np.cos(np.deg2rad(avoidAngle2))*avoidDist]
-            currentWaypoint = avoidWaypoint1
-            swappedOutWaypoints = [avoidWaypoint0, avoidWaypoint1, avoidWaypoint2, avoidWaypoint3]
-        elif False:#avoidingObstacle and len(waypoints) < 3:
-            rospy.loginfo("avoid3")
-            avoidAngle1 = getAngle(robotPose.pose.pose)+90
-            if avoidAngle1 >= 360:
-                avoidAngle1 = avoidAngle1-360
-            avoidAngle2 = getAngle(robotPose.pose.pose)-90
-            if avoidAngle2 < 0:
-                avoidAngle2 = avoidAngle2+360
-            avoidWaypoint1 = [robotPose.pose.pose.position.x-np.sin(np.deg2rad(avoidAngle1))*avoidDist, robotPose.pose.pose.position.y+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
-            avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDist, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDist]
-            avoidWaypoint3 = [avoidWaypoint2[0]-np.sin(np.deg2rad(avoidAngle2))*avoidDist, avoidWaypoint2[1]+np.cos(np.deg2rad(avoidAngle2))*avoidDist]
-            currentWaypoint = avoidWaypoint1
-            swappedOutWaypoints = [avoidWaypoint1, avoidWaypoint2, avoidWaypoint3]
+            if False: #checkMine():
+                avoidWaypoint0 = [robotPose.pose.pose.position.x+np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack, robotPose.pose.pose.position.y-np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack]
+                avoidWaypoint1 = [avoidWaypoint0[0]-np.sin(np.deg2rad(avoidAngle1))*avoidDist, avoidWaypoint0[1]+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
+                avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd*1.5, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd*1.5]
+            else:
+                avoidWaypoint0 = [robotPose.pose.pose.position.x, robotPose.pose.pose.position.y]
+                avoidWaypoint1 = [avoidWaypoint0[0]-np.sin(np.deg2rad(avoidAngle1))*avoidDist, avoidWaypoint0[1]+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
+                avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd]
+            currentWaypoint = avoidWaypoint0
+            swappedOutWaypoints = [avoidWaypoint0, avoidWaypoint1, avoidWaypoint2]
 
     elif abs(getAngle(robotPose.pose.pose)-getGoalAnglePoints(poseList, currentWaypoint)) >= 5:
         robotTwist.linear.x = 0.0
@@ -303,19 +295,25 @@ def updateRobotPose(ekfPose):
         robotTwist.angular.z = 0.0
         robotTwist.linear.x = fastLinearSpeed
         pubVel.publish(robotTwist)
-    if obstaclePresent and avoidingObstacle and len(swappedOutWaypoints) < 3:
-        rospy.loginfo("avoid3")
+
+    if obstaclePresent and avoidingObstacle and len(swappedOutWaypoints) < 2:
+        swappedOutWaypoints = []
         avoidAngle1 = getAngle(robotPose.pose.pose)+90
         if avoidAngle1 >= 360:
             avoidAngle1 = avoidAngle1-360
         avoidAngle2 = getAngle(robotPose.pose.pose)-90
         if avoidAngle2 < 0:
             avoidAngle2 = avoidAngle2+360
-        avoidWaypoint1 = [robotPose.pose.pose.position.x-np.sin(np.deg2rad(avoidAngle1))*avoidDist, robotPose.pose.pose.position.y+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
-        avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDist, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDist]
-        avoidWaypoint3 = [avoidWaypoint2[0]-np.sin(np.deg2rad(avoidAngle2))*avoidDist, avoidWaypoint2[1]+np.cos(np.deg2rad(avoidAngle2))*avoidDist]
-        currentWaypoint = avoidWaypoint1
-        swappedOutWaypoints = [avoidWaypoint1, avoidWaypoint2, avoidWaypoint3]
+        if False: #checkMine():
+            avoidWaypoint0 = [robotPose.pose.pose.position.x+np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack, robotPose.pose.pose.position.y-np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack]
+            avoidWaypoint1 = [avoidWaypoint0[0]-np.sin(np.deg2rad(avoidAngle1))*avoidDist, avoidWaypoint0[1]+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
+            avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd*1.5, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd*1.5]
+        else:
+            avoidWaypoint0 = [robotPose.pose.pose.position.x, robotPose.pose.pose.position.y]
+            avoidWaypoint1 = [avoidWaypoint0[0]-np.sin(np.deg2rad(avoidAngle1))*avoidDist, avoidWaypoint0[1]+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
+            avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd]
+        currentWaypoint = avoidWaypoint0
+        swappedOutWaypoints = [avoidWaypoint0, avoidWaypoint1, avoidWaypoint2]
 
 
 ######################### MAIN ############################
