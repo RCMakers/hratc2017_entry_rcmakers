@@ -6,6 +6,7 @@ from numpy import deg2rad
 from curses import wrapper
 from threading import Thread
 from geometry_msgs.msg import Twist, Pose, PoseStamped, PoseWithCovariance, PoseWithCovarianceStamped, Transform
+from std_msgs.msg import String
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan, Imu
 from metal_detector_msgs.msg._Coil import Coil
@@ -34,6 +35,8 @@ distanceFromCenterY = 4.5
 
 robotLength = 0.5
 pubVel  = rospy.Publisher('/RosAria/cmd_vel', Twist, queue_size=1)
+
+pubLog = rospy.Publisher('/angleDestlog', String, queue_size=1)
 robotPose = PoseWithCovarianceStamped()
 initialPose = PoseWithCovarianceStamped()
 stepPose = PoseWithCovarianceStamped()
@@ -219,7 +222,9 @@ def updateRobotPose(ekfPose):
     poseList = [robotPose.pose.pose.position.x, robotPose.pose.pose.position.y]
     logMessage = str(getAngle(robotPose.pose.pose))
     logMsg2 = str(getGoalAnglePoints(poseList, currentWaypoint))
-    rospy.loginfo("Angle: " + logMessage + " Goalangle: "+logMsg2 + " waypoint: "+str(currentWaypoint))
+    logString = "Angle: " + logMessage + " Goalangle: "+logMsg2 + " waypoint: "+str(currentWaypoint)
+    pubLog.publish(logString)
+    rospy.loginfo(logString)
     obstaclePresent = False
     lazors = []
     if len(laserInfo.ranges) > 0:
@@ -250,16 +255,28 @@ def updateRobotPose(ekfPose):
         if mineAngleMin < 0:
             mineAngleMin = mineAngleMin +360
             if (getAngle(robotPose.pose.pose) < mineAngleMax or getAngle(robotPose.pose.pose) > mineAngleMin):
+                if getAngle(robotPose.pose.pose) > mineAngleMax or getAngle(robotPose.pose.pose) < mineAngle:
+                    obstacleToLeft = True
+                else:
+                    obstacleToLeft = False
                 obstaclePresent = True
                 facingMine = True
         elif mineAngleMax >= 360:
             mineAngleMax = mineAngleMax-360
             if (getAngle(robotPose.pose.pose) < mineAngleMax or getAngle(robotPose.pose.pose) > mineAngleMin):
+                if getAngle(robotPose.pose.pose) < mineAngleMin or getAngle(robotPose.pose.pose) >= mineAngle:
+                    obstacleToLeft = False
+                else:
+                    obstacleToLeft = True
                 obstaclePresent = True
                 facingMine = True 
         
         else:
             if(getAngle(robotPose.pose.pose) < mineAngleMax and getAngle(robotPose.pose.pose) > mineAngleMin):
+                if getAngle(robotPose.pose.pose) >= mineAngle:
+                    obstacleToLeft = False
+                else:
+                    obstacleToLeft = True
                 obstaclePresent = True
                 facingMine = True
         if obstaclePresent and facingMine:
