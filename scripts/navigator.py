@@ -15,6 +15,8 @@ import math
 
 USING_SIM = False
 
+minDist = 100000000000
+
 firstInc = True
 
 # read/write stuff on screen
@@ -53,7 +55,9 @@ obstacleSeq = 0
 obstacleStep = 1 
 avoidingObstacle = False
 
-mineTriggerDist = 0.5
+mineCoords = []
+
+mineTriggerDist = 0.7
 mapDistanceY = 8.0
 slowLinearSpeed = 0.3
 angularSpeed = 0.6
@@ -66,6 +70,10 @@ avoidDistFwd = 1.5
 avoidDistBack = 0.5
 
 turningError = 3
+
+avoidingMine = False
+facingMine = False
+obstacleToLeft = False
 
 waypoints = [[0.0,0.0],[11.364583, 4.0], [10.841441, -1.8], [9.754374499999999, -1.7750000000000001], 
              [10.230339749999999, 3.95], [9.0960965, 3.9], [8.667308, -1.75], [7.5802415, -1.725], 
@@ -138,6 +146,8 @@ def getGoalAngle(index1, index2):
         return angle + 270
 
 def getGoalAnglePoints(point1, point2):
+    if len(point2) < 2:
+        return -1
     if point2[0] == point1[0]:
         if point2[1] < point1[1]:
             return 180
@@ -184,14 +194,20 @@ def recieveMine(MineNow):
     mines.append(minePoseCache)
 
 def checkMine():
+    global mineCoords
+    mineCoords = []
     if len(mines) > 0:
         for mine in mines:
             if get_pose_distance(mine.pose,robotPose.pose.pose) <= mineTriggerDist:
+                mineCoords = [mine.pose.position.x, mine.pose.position.y]
+                rospy.loginfo("mine checked at {}: ".format(str(mineCoords)))
                 return True
     return False
 
 def updateRobotPose(ekfPose):
-    global turnStep, robotPose, robotTwistMeasured, transListener, robotTwist, pubVel, stepPose, goalPose, waypoints, currentWaypoint, goal, goalAngle, avoidingObstacle, swappedOutWaypoints
+    global turnStep, robotPose, robotTwistMeasured, transListener, robotTwist, pubVel, stepPose, goalPose, waypoints, currentWaypoint, goal, goalAngle, avoidingObstacle, swappedOutWaypoints, facingMine, avoidingMine, mineCoords, minDist, obstacleToLeft
+    avoidAngle1 = 0
+    avoidAngle2 = 0
     robotTwistMeasured = ekfPose.twist
     poseCache = PoseWithCovarianceStamped()
     poseCache.pose = ekfPose.pose
@@ -210,19 +226,49 @@ def updateRobotPose(ekfPose):
         startLaser = len(laserInfo.ranges)/2-int((np.pi/4)/laserInfo.angle_increment)
         endLaser = len(laserInfo.ranges)/2+int((np.pi/4)/laserInfo.angle_increment)
         for h in laserInfo.ranges[startLaser:endLaser]:
-            if h != 0.0:
+            if h >= 0.1:
                 lazors.append(h)
-        if min(lazors) <= 1.0:
+        minDist = min(lazors)
+        if min(lazors) <= 0.8:
             rospy.loginfo("obstacle detected {} away".format(str(min(lazors))))
+            for l in range(startLaser, endLaser):
+                if laserInfo.ranges[l] == minDist:
+                    if l >= len(laserInfo.ranges)/2:
+                        obstacleToLeft = True
+                        break
+                    else:
+                        obstacleToLeft = False
+                        break
             obstaclePresent = True
 
-    if checkMine():
-        rospy.loginfo("mine near")
-        obstaclePresent = True
-
-    if len(waypoints) == 0 and avoidingObstacle:
+    checkMine()
+    mineAngle = getGoalAnglePoints(poseList, mineCoords)
+    if mineAngle != -1:
+        mineAngleMin = mineAngle-90
+        mineAngleMax = mineAngle+90
+        facingMine = False
+        if mineAngleMin < 0:
+            mineAngleMin = mineAngleMin +360
+            if (getAngle(robotPose.pose.pose) < mineAngleMax or getAngle(robotPose.pose.pose) > mineAngleMin):
+                obstaclePresent = True
+                facingMine = True
+        elif mineAngleMax >= 360:
+            mineAngleMax = mineAngleMax-360
+            if (getAngle(robotPose.pose.pose) < mineAngleMax or getAngle(robotPose.pose.pose) > mineAngleMin):
+                obstaclePresent = True
+                facingMine = True 
+        
+        else:
+            if(getAngle(robotPose.pose.pose) < mineAngleMax and getAngle(robotPose.pose.pose) > mineAngleMin):
+                obstaclePresent = True
+                facingMine = True
+        if obstaclePresent and facingMine:
+            if facingMine and (not avoidingMine):
+                avoidingMine = True
+                
+            rospy.loginfo("facing near mine at {}, angle of {}, min {}, max{}".format(str(mineCoords), str(mineAngle), str(mineAngleMin), str(mineAngleMax)))
+    if len(swappedOutWaypoints) == 0 and avoidingObstacle:
         avoidingObstacle = False
-        waypoints = swappedOutWaypoints
         currentWaypoint = waypoints[0]
 
 
@@ -236,6 +282,8 @@ def updateRobotPose(ekfPose):
                 currentWaypoint = swappedOutWaypoints[0]
             else:
                 avoidingObstacle = False
+                if avoidingMine:
+                    avoidingMine = False
                 currentWaypoint = waypoints[0]
         else:
             waypoints.pop(0)
@@ -254,13 +302,21 @@ def updateRobotPose(ekfPose):
             rospy.loginfo("avoid2")
             avoidingObstacle = True
             swappedOutWaypoints = []
-            avoidAngle1 = getAngle(robotPose.pose.pose)+90
-            if avoidAngle1 >= 360:
-                avoidAngle1 = avoidAngle1-360
-            avoidAngle2 = getAngle(robotPose.pose.pose)-90
-            if avoidAngle2 < 0:
-                avoidAngle2 = avoidAngle2+360
-            if False: #checkMine():
+            if not obstacleToLeft:
+                avoidAngle1 = getAngle(robotPose.pose.pose)+90
+                if avoidAngle1 >= 360:
+                    avoidAngle1 = avoidAngle1-360
+                avoidAngle2 = getAngle(robotPose.pose.pose)-90
+                if avoidAngle2 < 0:
+                    avoidAngle2 = avoidAngle2+360
+            else:
+                avoidAngle1 = getAngle(robotPose.pose.pose)-90
+                if avoidAngle1 >= 360:
+                    avoidAngle1 = avoidAngle1-360
+                avoidAngle2 = getAngle(robotPose.pose.pose)+90
+                if avoidAngle2 < 0:
+                    avoidAngle2 = avoidAngle2+360
+            if False:
                 avoidWaypoint0 = [robotPose.pose.pose.position.x+np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack, robotPose.pose.pose.position.y-np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack]
                 avoidWaypoint1 = [avoidWaypoint0[0]-np.sin(np.deg2rad(avoidAngle1))*avoidDist, avoidWaypoint0[1]+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
                 avoidWaypoint2 = [avoidWaypoint1[0]-np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd*1.5, avoidWaypoint1[1]+np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistFwd*1.5]
@@ -296,14 +352,24 @@ def updateRobotPose(ekfPose):
         robotTwist.linear.x = fastLinearSpeed
         pubVel.publish(robotTwist)
 
-    if obstaclePresent and avoidingObstacle and len(swappedOutWaypoints) < 2:
+    if obstaclePresent and avoidingObstacle and (len(swappedOutWaypoints) < 2 or (avoidingMine and minDist <= 0.7)):
+        if avoidingMine and minDist <= 0.7:
+            avoidingMine = False
         swappedOutWaypoints = []
-        avoidAngle1 = getAngle(robotPose.pose.pose)+90
-        if avoidAngle1 >= 360:
-            avoidAngle1 = avoidAngle1-360
-        avoidAngle2 = getAngle(robotPose.pose.pose)-90
-        if avoidAngle2 < 0:
-            avoidAngle2 = avoidAngle2+360
+        if not obstacleToLeft:
+            avoidAngle1 = getAngle(robotPose.pose.pose)+90
+            if avoidAngle1 >= 360:
+                avoidAngle1 = avoidAngle1-360
+            avoidAngle2 = getAngle(robotPose.pose.pose)-90
+            if avoidAngle2 < 0:
+                avoidAngle2 = avoidAngle2+360
+        else:
+            avoidAngle1 = getAngle(robotPose.pose.pose)-90
+            if avoidAngle1 >= 360:
+                avoidAngle1 = avoidAngle1-360
+            avoidAngle2 = getAngle(robotPose.pose.pose)+90
+            if avoidAngle2 < 0:
+                avoidAngle2 = avoidAngle2+360
         if False: #checkMine():
             avoidWaypoint0 = [robotPose.pose.pose.position.x+np.sin(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack, robotPose.pose.pose.position.y-np.cos(np.deg2rad(getAngle(robotPose.pose.pose)))*avoidDistBack]
             avoidWaypoint1 = [avoidWaypoint0[0]-np.sin(np.deg2rad(avoidAngle1))*avoidDist, avoidWaypoint0[1]+np.cos(np.deg2rad(avoidAngle1))*avoidDist]
