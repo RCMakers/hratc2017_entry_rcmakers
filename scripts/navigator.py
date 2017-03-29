@@ -234,7 +234,7 @@ def updateRobotPose(ekfPose):
             if h >= 0.1:
                 lazors.append(h)
         minDist = min(lazors)
-        if min(lazors) <= 0.8:
+        if min(lazors) <= 0.6:
             rospy.loginfo("obstacle detected {} away".format(str(min(lazors))))
             for l in range(startLaser, endLaser):
                 if laserInfo.ranges[l] == minDist:
