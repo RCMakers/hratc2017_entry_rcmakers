@@ -207,7 +207,7 @@ def isMine():
     prediction = decTree.predict(coilData)
     
     if prediction:
-	#rospy.loginfo("DATA DUMP: "+str(robotPose.pose.pose.position))
+	rospy.loginfo("MINE POSITION: "+str(robotPose.pose.pose.position))
         return True
     else:
         return False
