@@ -1,5 +1,10 @@
 <launch>
-   <param name="use_sim_time" value="true"/> 
+   <param name="use_sim_time" value="false"/>
+   <node pkg = "tf" type="tf_remap" name="tf_remapper" output="screen">
+      <rosparam param="mappings">
+         [{old: base_imu, new: imu_link}]
+      </rosparam>
+   </node>
    <node name="locator" pkg="robot_localization" type="ekf_localization_node" output="screen">
       <param name="frequency" value="30.0"/>
       <param name="sensor_timeout" value="1.0"/>
@@ -7,15 +12,15 @@
       <param name="odom_frame" value="odom"/>
       <param name="base_link_frame" value="base_link"/>
       <param name="world_frame" value="odom"/>
-      <param name="odom0" value="/p3at/odom"/>
+      <param name="odom0" value="/RosAria/pose"/>
       <rosparam param="odom0_config">[true, true, false,
                                       true, true, true,
                                       true, true, false,
-                                      false, false, true,
+                                      false, false, false,
                                       false, false, false]</rosparam>
       <param name="imu0" value="/imu/data"/>
       <rosparam param="imu0_config">[false, false, false,
-                                    true, true, true,
+                                    false, false, false,
                                     false, false, false,
                                     true, true, true,
                                     true, true, true]</rosparam>
@@ -25,6 +30,6 @@
      <param name="imu0_relative" value="false"/>
      <param name="imu0_remove_gravitational_acceleration" value="true"/>
    </node>   
-   <node name="navigator" pkg="hratc2017_entry_rcmakers" type="navigator.py" respawn="true" output="screen"/>
-   <node name="detector" pkg="hratc2017_entry_rcmakers" type="detector.py" respawn="true" output="screen"/>
+   <node name="navigator" pkg="hratc2017_entry_rcmakers" type="navigator.py" respawn="false" output="screen"/>
+   <node name="detector" pkg="hratc2017_entry_rcmakers" type="detector.py" respawn="false" output="screen"/>
 </launch>

@@ -123,7 +123,7 @@ include_directories(include ${Boost_INCLUDE_DIR} ${catkin_INCLUDE_DIRS} ${GAZEBO
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(hratc2016_entry_template_node
-#   ${catkin_LIBRARIES}
+#    ${catkin_LIBRARIES}
 # )
 
 #############
